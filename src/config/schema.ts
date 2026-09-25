@@ -56,6 +56,36 @@ export const configSchema = z
       })
       .strict()
       .default({ merge_gap_seconds: 2, max_line_seconds: 60 }),
+
+    summary: z
+      .object({
+        /** Any Claude model ID. */
+        model: z.string().default('claude-opus-5'),
+        /** Thinking/effort for the per-chunk extraction pass and the final write-up. */
+        extract_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
+        synthesize_effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('high'),
+        /** If Claude declines a request, let the API retry it on Anthropic's recommended fallback model. */
+        fallbacks: z.boolean().default(true),
+        /** low = a few highlights; medium = organised notes; high = thorough, nothing relevant left out. */
+        detail: z.enum(['low', 'medium', 'high']).default('medium'),
+        /** Put [HH:MM:SS] references next to points in the summary. */
+        cite_timestamps: z.boolean().default(true),
+        /** What the summary should capture. Each rule becomes a section. */
+        include: z
+          .array(z.string().min(1))
+          .min(1)
+          .default(['Main topics discussed', 'Decisions made', 'Action items and who owns them', 'Open questions and unresolved issues']),
+        /** What to leave out even if it matches an include rule. */
+        exclude: z.array(z.string().min(1)).default([]),
+        /** Background Claude should know: what these calls are, who people are, recurring names. */
+        context: z.string().optional(),
+        /** Transcript is processed in chunks of this many minutes. */
+        chunk_minutes: z.number().min(5).max(60).default(20),
+        /** Folder with prompt templates overriding the built-in ones (extract.md / synthesize.md). */
+        prompts_dir: z.string().optional(),
+      })
+      .strict()
+      .prefault({}),
   })
   .strict();
 

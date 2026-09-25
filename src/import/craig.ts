@@ -135,7 +135,7 @@ export async function importCraig(
       await mapLimit(regions, 4, (r) => extractOpus(file, r, join(outDir, `${Math.round(info.startTime + r.startSec * 1000)}.ogg`)));
       const speechSec = regions.reduce((n, r) => n + r.endSec - r.startSec, 0);
       speakers.push({ track, name: username, userId, utterances: regions.length, speechSec });
-      log(`  track ${track} ${username}: ${regions.length} utterances, ${(speechSec / 60).toFixed(1)} min of speech`);
+      log(`  track ${track} ${username}: ${regions.length} utterances, ${speechSec < 60 ? `${Math.round(speechSec)} s` : `${(speechSec / 60).toFixed(1)} min`} of speech`);
     }
 
     const session: SessionInfo = {

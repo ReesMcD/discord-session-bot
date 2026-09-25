@@ -95,11 +95,48 @@ Batches that were already transcribed are cached, so re-running is free.
 To rename speakers or change how lines are joined, edit `config.yaml` and run
 `npm run merge -- <session>`. That rebuilds `transcript.md` without calling the API again.
 
+## Import a Craig recording
+
+[Craig](https://craig.chat) records each speaker on their own track. Download a recording as
+**Multi-track → FLAC** (a `.zip`), then:
+
+```sh
+npm run import:craig -- ~/Downloads/craig-XXXX.zip             # import + transcribe
+npm run import:craig -- ~/Downloads/craig-XXXX.zip --summarize # ...and summarize
+```
+
+This works out who is on each track from Craig's `info.txt`, splits each track into utterances
+wherever there's silence, and writes the same session folder the bot does
+(`data/sessions/craig-<id>/`). Everything else (transcribe, merge, summarize) works the same.
+Anyone listed in `recording.ignore_users` is skipped.
+
+## Summarize
+
+Needs `ANTHROPIC_API_KEY` in `.env`.
+
+```sh
+npm run summarize -- <session>
+```
+
+This writes `summary.md` next to `transcript.md`. It runs in two passes:
+
+1. **Extract.** The transcript is read in 20-minute chunks. Each chunk yields the items that match
+   your `summary.include` rules, minus anything matching `summary.exclude`.
+2. **Write.** Claude combines those items into one summary, with a section per include rule, at
+   your `summary.detail` level, optionally citing `[HH:MM:SS]` timestamps.
+
+To tune it, edit `summary:` in `config.yaml` and re-run. Chunks whose inputs didn't change are reused,
+so changing only `detail` or `cite_timestamps` just redoes the final write-up. `--force` redoes everything.
+Prompts live in `prompts/*.v1.md`; copy them into a folder and set `summary.prompts_dir` to customise.
+`summary/meta.json` records the model, prompt versions and token usage for each run.
+
+You can also add `--summarize` to `npm run transcribe` to go straight from audio to summary.
+
 ## Configuration
 
 `config.yaml` (see [config.example.yaml](config.example.yaml)): ignore list, speaker names,
 transcription provider/model/language, a vocabulary `prompt` for names Whisper should spell
-correctly, and transcript formatting. Every setting is optional. Discord IDs can be quoted or not.
+correctly, transcript formatting, and summary rules. Every setting is optional. Discord IDs can be quoted or not.
 Secrets stay in `.env`.
 
 ## Development

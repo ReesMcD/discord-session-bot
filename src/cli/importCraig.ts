@@ -1,5 +1,5 @@
 /**
- * npm run import:craig -- <craig-export.zip | extracted folder> [--no-transcribe]
+ * npm run import:craig -- <craig-export.zip | extracted folder> [--no-transcribe] [--summarize]
  *
  * Turns a Craig multi-track recording into a session folder, then transcribes it.
  */
@@ -9,10 +9,12 @@ import { importCraig } from '../import/craig.js';
 import { createTranscriber } from '../transcription/factory.js';
 import { transcribeSession } from '../transcription/transcribeSession.js';
 import { mergeSession } from '../transcript/merge.js';
+import { runSummaryStep } from './summaryStep.js';
 
-const { config } = setup();
+const loaded = setup();
+const { config } = loaded;
 const input = process.argv[2];
-if (!input || input.startsWith('--')) die('Usage: npm run import:craig -- <craig-export.zip | folder> [--no-transcribe]');
+if (!input || input.startsWith('--')) die('Usage: npm run import:craig -- <craig-export.zip | folder> [--no-transcribe] [--summarize]');
 const dataDir = resolve(process.env.DATA_DIR ?? './data');
 
 let result;
@@ -36,4 +38,5 @@ if (process.argv.includes('--no-transcribe')) {
   console.log(`Transcribed: ${stats.segments} segments (${stats.dropped} dropped as likely hallucinations)`);
   const merged = mergeSession(result.sessionDir, config);
   console.log(`Transcript: ${merged.file}`);
+  if (process.argv.includes('--summarize') && !(await runSummaryStep(result.sessionDir, loaded))) process.exit(1);
 }
