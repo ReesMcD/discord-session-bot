@@ -1,0 +1,27 @@
+{
+  "name": "discord-session-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted Discord bot that records voice calls per speaker and produces timestamped transcripts.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "spike:receive": "tsx src/spike/receive.ts",
+    "spike:mix": "tsx src/spike/mix.ts"
+  },
+  "dependencies": {
+    "@discordjs/voice": "0.19.2",
+    "discord.js": "^14.27.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
