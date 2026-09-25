@@ -15,7 +15,8 @@
     "spike:mix": "tsx src/spike/mix.ts",
     "transcribe": "tsx src/cli/transcribe.ts",
     "merge": "tsx src/cli/merge.ts",
-    "check:deps": "tsx scripts/check-deps.ts"
+    "check:deps": "tsx scripts/check-deps.ts",
+    "import:craig": "tsx src/cli/importCraig.ts"
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
