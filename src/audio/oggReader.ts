@@ -1,4 +1,4 @@
-import { oggCrc } from '../../src/audio/OggOpusWriter.js';
+import { oggCrc } from './OggOpusWriter.js';
 
 export interface OggPage {
   flags: number;
@@ -9,7 +9,7 @@ export interface OggPage {
   packets: Buffer[];
 }
 
-/** Test-only Ogg demuxer: splits a file into pages and packets, verifying CRCs. */
+/** Minimal Ogg demuxer: splits a file into pages and packets, verifying CRCs. */
 export function readOgg(data: Buffer): OggPage[] {
   const pages: OggPage[] = [];
   let offset = 0;
@@ -44,4 +44,25 @@ export function readOgg(data: Buffer): OggPage[] {
     offset += pageLen;
   }
   return pages;
+}
+
+/**
+ * Duration of an Ogg Opus file in seconds, from the granule position of its last complete page.
+ * Tolerates a truncated final page (e.g. after a crash) by ignoring it.
+ */
+export function oggOpusDurationSec(data: Buffer): number {
+  let offset = 0;
+  let granule = 0n;
+  while (offset + 27 <= data.length && data.toString('ascii', offset, offset + 4) === 'OggS') {
+    const nSegs = data[offset + 26]!;
+    if (offset + 27 + nSegs > data.length) break;
+    let bodyLen = 0;
+    for (let i = 0; i < nSegs; i++) bodyLen += data[offset + 27 + i]!;
+    const end = offset + 27 + nSegs + bodyLen;
+    if (end > data.length) break;
+    const g = data.readBigUInt64LE(offset + 6);
+    if (g !== 0xffffffffffffffffn && g > granule) granule = g;
+    offset = end;
+  }
+  return Number(granule) / 48_000;
 }

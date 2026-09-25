@@ -1,0 +1,34 @@
+# Copy to config.yaml and edit. Every setting is optional; omitted ones use the defaults shown.
+# Discord IDs: turn on Developer Mode (User Settings → Advanced), then right-click → Copy ID.
+# Secrets (tokens, API keys) never go here; they live in .env.
+
+recording:
+  # Never recorded, e.g. your music bot.
+  ignore_users: []
+  #  - "234395307759108106"
+  ignore_bots: true
+  # An utterance ends after this much silence.
+  silence_ms: 1000
+  # Delete local audio this many days after a session is processed (0 = keep forever).
+  audio_retention_days: 30
+
+# Names to use in transcripts. Anyone not listed uses their Discord display name.
+speakers: {}
+#  "123456789012345678": Rees
+#  "223456789012345678": Sam
+
+transcription:
+  provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)
+  # model: whisper-large-v3-turbo   # default per provider; OpenAI needs whisper-1 for timestamps
+  # base_url: http://localhost:8000/v1   # any OpenAI-compatible server
+  # language: en              # set it if everyone speaks one language: more accurate, no mis-detection
+  # prompt: "Names and terms: Rees, Sam, Waterdeep, Strahd."   # helps Whisper spell names right
+  batch_minutes: 10
+  concurrency: 2
+  min_utterance_ms: 400
+
+transcript:
+  # Join consecutive lines from one speaker if they paused at most this long.
+  merge_gap_seconds: 2
+  max_line_seconds: 60
+  # timezone: America/New_York   # defaults to the machine's time zone

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { OggOpusWriter } from '../src/audio/OggOpusWriter.js';
 import { SILENCE_FRAME } from '../src/audio/opus.js';
 import { PCM_RATE, decodeToPcm16k } from '../src/audio/decode.js';
-import { readOgg } from './helpers/oggReader.js';
+import { readOgg } from '../src/audio/oggReader.js';
 import { FFMPEG, ffmpeg, hasFfmpeg } from './helpers/ffmpeg.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'ogg-test-'));

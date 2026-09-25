@@ -17,6 +17,11 @@ Later phases add AI summarization and pluggable publishing.
 
 ## Phase 1 — Join, record, transcribe
 
+**Status:** M0 test script ready (awaiting a live run). M2 (Groq transcription) and M3 (merge →
+`transcript.md`) are built and tested offline via `npm run transcribe` / `npm run merge`, still needing a
+live Groq run. `config.yaml` loader and CI are done. M1 (bot commands, reconnects, crash recovery)
+waits on M0.
+
 - **M0 DAVE receive spike (go/no-go).** Join, subscribe per speaker, write Ogg/Opus per utterance. Test with 2+ humans, a mid-call join/leave, and the music bot playing. Pass = clean audio, zero files for ignored users. Plan B if it fails: Python recorder sidecar (py-cord / discord-ext-voice-recv) writing the same on-disk format.
 - **M1 Recording.** `/record`, `/stop`, `/status`; ignore users/bots before subscribe; start/stop channel messages; reconnect state machine; crash recovery on boot.
 - **M2 Transcription.** `Transcriber` interface; per-speaker batching (ffmpeg concat + offset map) so short utterances aren't sent individually; word timestamps remapped to absolute time; hallucination / no-speech filtering.

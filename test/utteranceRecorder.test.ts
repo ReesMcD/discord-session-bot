@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { UtteranceRecorder } from '../src/recording/UtteranceRecorder.js';
 import { SILENCE_FRAME } from '../src/audio/opus.js';
-import { readOgg } from './helpers/oggReader.js';
+import { readOgg } from '../src/audio/oggReader.js';
 
 function fakeClock(start: number) {
   let t = start;

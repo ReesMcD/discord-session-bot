@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest is Apple Silicon, same as the Mac mini this runs on.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install ffmpeg
+        run: |
+          if command -v ffmpeg >/dev/null; then exit 0; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update -q && sudo apt-get install -yq ffmpeg; else brew install ffmpeg; fi
+      - run: npm ci
+      - run: npm run check:deps
+      - run: npm run typecheck
+      - run: npm test

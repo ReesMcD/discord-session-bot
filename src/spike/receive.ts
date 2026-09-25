@@ -22,18 +22,24 @@ import {
 import { Client, Events, GatewayIntentBits, type Guild } from 'discord.js';
 import { UtteranceRecorder, type UtteranceRecord } from '../recording/UtteranceRecorder.js';
 import { skipReason, type RecordFilterConfig } from '../recording/filters.js';
+import { ConfigError, loadConfig } from '../config/load.js';
+import { paths, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
+import { loadDotEnv } from '../util/env.js';
 
+loadDotEnv();
+let config;
 try {
-  process.loadEnvFile();
-} catch {
-  // no .env file; rely on the real environment
+  config = loadConfig().config;
+} catch (err) {
+  if (err instanceof ConfigError) fail(err.message);
+  throw err;
 }
 
 const { values: args } = parseArgs({
   options: {
     channel: { type: 'string' },
     minutes: { type: 'string' },
-    'silence-ms': { type: 'string', default: '1000' },
+    'silence-ms': { type: 'string' },
   },
 });
 
@@ -41,15 +47,17 @@ const token = process.env.DISCORD_TOKEN;
 if (!token) fail('DISCORD_TOKEN is not set (put it in .env)');
 if (!args.channel) fail('Pass --channel <voiceChannelId> (Discord developer mode → right-click channel → Copy Channel ID)');
 const channelId = args.channel;
-const silenceMs = Number(args['silence-ms']);
-const ignoreUserIds = new Set((process.env.IGNORE_USER_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean));
-const ignoreBots = (process.env.IGNORE_BOTS ?? 'true').toLowerCase() !== 'false';
+const silenceMs = args['silence-ms'] ? Number(args['silence-ms']) : config.recording.silence_ms;
+const ignoreUserIds = new Set(config.recording.ignore_users);
+const ignoreBots = config.recording.ignore_bots;
 
 const sessionId = `spike-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const sessionDir = resolve(process.env.DATA_DIR ?? './data', 'sessions', sessionId);
 mkdirSync(sessionDir, { recursive: true });
 const debugLog = join(sessionDir, 'debug.log');
 const t0 = Date.now();
+const sessionInfo: SessionInfo = { id: sessionId, startedAt: t0 };
+const participants: Record<string, Participant> = {};
 
 function stamp(): string {
   const s = (Date.now() - t0) / 1000;
@@ -120,6 +128,8 @@ client.once(Events.ClientReady, async (ready) => {
     connection.destroy();
     fail('Voice connection did not become Ready within 30s');
   }
+  Object.assign(sessionInfo, { guildId: guild.id, guildName: guild.name, channelId: channel.id, channelName: channel.name });
+  writeJson(paths.session(sessionDir), sessionInfo);
   event(`Joined #${channel.name} in ${guild.name}. Recording — Ctrl+C to stop.`);
 
   const minutes = args.minutes ? Number(args.minutes) : undefined;
@@ -176,6 +186,10 @@ function wireConnection(connection: VoiceConnection, guild: Guild, filter: Recor
           event(`not recording ${name} (${userId}): ${reason}`);
           return;
         }
+        if (!participants[userId]) {
+          participants[userId] = { displayName: name, ...(member ? { username: member.user.username } : {}) };
+          writeJson(paths.participants(sessionDir), participants);
+        }
         if (stopping || active.has(userId)) return;
         const stream = connection.receiver.subscribe(userId, {
           end: { behavior: EndBehaviorType.AfterSilence, duration: silenceMs },
@@ -216,6 +230,8 @@ async function stop(connection: VoiceConnection): Promise<void> {
   for (const stream of connection.receiver.subscriptions.values()) stream.destroy();
   await Promise.all(active.values());
   connection.destroy();
+  sessionInfo.stoppedAt = Date.now();
+  writeJson(paths.session(sessionDir), sessionInfo);
 
   const report = {
     sessionId,
@@ -241,6 +257,7 @@ async function stop(connection: VoiceConnection): Promise<void> {
   if (stats.size === 0) console.log('  No audio captured from anyone — receive is NOT working.');
   console.log(`\nFiles + debug.log + report.json in ${sessionDir}`);
   console.log(`Next: npm run spike:mix -- "${sessionDir}"`);
+  console.log(`  and: npm run transcribe -- "${sessionDir}"`);
   await client.destroy();
   process.exit(0);
 }

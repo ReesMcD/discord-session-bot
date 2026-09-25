@@ -8,9 +8,10 @@
  * Uses the filenames (audio/<userId>/<startEpochMs>.ogg) as the source of truth, so it also
  * works on sessions that crashed before utterances.jsonl was written.
  */
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PCM_RATE, decodeToPcm16k, pcmToWav } from '../audio/decode.js';
+import { listUtterances } from '../session/layout.js';
 
 const sessionDir = process.argv[2];
 if (!sessionDir) {
@@ -18,16 +19,9 @@ if (!sessionDir) {
   process.exit(1);
 }
 
-const audioDir = join(sessionDir, 'audio');
-const clips: { userId: string; startMs: number; file: string }[] = [];
-for (const userId of readdirSync(audioDir)) {
-  for (const name of readdirSync(join(audioDir, userId))) {
-    const m = /^(\d+)\.ogg$/.exec(name);
-    if (m) clips.push({ userId, startMs: Number(m[1]), file: join(audioDir, userId, name) });
-  }
-}
+const clips = listUtterances(sessionDir).map((u) => ({ userId: u.userId, startMs: u.startMs, file: u.path }));
 if (clips.length === 0) {
-  console.error(`No clips under ${audioDir}`);
+  console.error(`No clips under ${join(sessionDir, 'audio')}`);
   process.exit(1);
 }
 

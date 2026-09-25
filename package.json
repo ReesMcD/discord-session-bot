@@ -12,11 +12,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "spike:receive": "tsx src/spike/receive.ts",
-    "spike:mix": "tsx src/spike/mix.ts"
+    "spike:mix": "tsx src/spike/mix.ts",
+    "transcribe": "tsx src/cli/transcribe.ts",
+    "merge": "tsx src/cli/merge.ts",
+    "check:deps": "tsx scripts/check-deps.ts"
   },
   "dependencies": {
     "@discordjs/voice": "0.19.2",
     "discord.js": "^14.27.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
