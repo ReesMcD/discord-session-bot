@@ -19,6 +19,8 @@ speaker-labelled transcript, and summarize them with Claude. It all runs on your
 | `/record`, `/stop`, `/status` slash commands, auto-posting the transcript | none yet | Next milestone, waiting on the recording test ([PLAN.md](PLAN.md)) |
 | Auto-publishing (e.g. to GitHub) | none yet | Phase 3 |
 
+**Testing on a Mac with Claude Code?** Follow [TESTING.md](TESTING.md).
+
 **The quickest way to a real transcript and summary right now** is to record with Craig, then
 run `npm run import:craig -- <zip> --summarize` (see [Usage A](#a-import-a-craig-recording)).
 
@@ -44,7 +46,6 @@ ffmpeg -version    # any recent version
 ```sh
 git clone https://github.com/ReesMcD/discord-session-bot.git
 cd discord-session-bot
-git checkout claude/phase-1-plan     # current development branch
 npm install
 npm run check:deps                   # should end with "Voice dependencies OK"
 ```
