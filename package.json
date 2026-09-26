@@ -17,7 +17,8 @@
     "merge": "tsx src/cli/merge.ts",
     "check:deps": "tsx scripts/check-deps.ts",
     "import:craig": "tsx src/cli/importCraig.ts",
-    "summarize": "tsx src/cli/summarize.ts"
+    "summarize": "tsx src/cli/summarize.ts",
+    "doctor": "tsx src/cli/doctor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

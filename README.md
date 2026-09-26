@@ -133,8 +133,12 @@ the setting.
 ### 7. Check everything works
 
 ```sh
-npm test           # all tests should pass
+npm run doctor              # checks Node, ffmpeg, voice libraries, .env and config.yaml
+npm run doctor -- --online  # also tests each API key (and lists the servers the bot is in)
+npm test                    # all tests should pass
 ```
+
+`doctor` prints a line per check (`✓` fine, `!` warning, `✗` must fix), each with the fix.
 
 ---
 
@@ -287,6 +291,7 @@ Both APIs charge by usage, so check current pricing before relying on these roug
 
 | Problem | Fix |
 |---|---|
+| Not sure what's wrong | Run `npm run doctor -- --online` first; it checks the tools, keys and config, and says how to fix each problem. |
 | `DISCORD_TOKEN is not set` / `No API key for groq` / `ANTHROPIC_API_KEY is not set` | Add the key to `.env`, and run commands from the project folder (that's where `.env` is read). |
 | `Discord login failed` | The token is wrong or was reset. Copy a fresh one from the Developer Portal → Bot. |
 | `Voice connection did not become Ready` | The bot needs **View Channels** and **Connect** on that voice channel. Also check the channel ID. |

@@ -93,6 +93,7 @@ const resolving = new Set<string>();
 let decryptFailureLines = 0;
 let daveLines = 0;
 let reconnects = 0;
+let resubscribes = 0;
 let stopping = false;
 
 function event(e: string): void {
@@ -190,21 +191,32 @@ function wireConnection(connection: VoiceConnection, guild: Guild, filter: Recor
           participants[userId] = { displayName: name, ...(member ? { username: member.user.username } : {}) };
           writeJson(paths.participants(sessionDir), participants);
         }
-        if (stopping || active.has(userId)) return;
-        const stream = connection.receiver.subscribe(userId, {
-          end: { behavior: EndBehaviorType.AfterSilence, duration: silenceMs },
-        });
-        const recorder = new UtteranceRecorder({ sessionDir, userId, maxFillMs: silenceMs + 500 });
-        const done = recorder.record(stream).then((rec) => {
-          active.delete(userId);
-          if (rec) onUtterance(rec, name);
-        });
-        active.set(userId, done);
+        startRecording(connection, userId, name);
       } finally {
         resolving.delete(userId);
       }
     })();
   });
+}
+
+function startRecording(connection: VoiceConnection, userId: string, name: string): void {
+  if (stopping || active.has(userId)) return;
+  const stream = connection.receiver.subscribe(userId, {
+    end: { behavior: EndBehaviorType.AfterSilence, duration: silenceMs },
+  });
+  const recorder = new UtteranceRecorder({ sessionDir, userId, maxFillMs: silenceMs + 500 });
+  const done = recorder.record(stream).then((rec) => {
+    active.delete(userId);
+    if (rec) onUtterance(rec, name);
+    // A decrypt error (e.g. during a DAVE key change) ends the stream while the person may still be
+    // talking. "speaking start" won't fire again until they pause, so resubscribe straight away.
+    if (rec?.error && !stopping && connection.receiver.speaking.users.has(userId)) {
+      resubscribes++;
+      event(`resubscribing ${name} after stream error: ${rec.error}`);
+      startRecording(connection, userId, name);
+    }
+  });
+  active.set(userId, done);
 }
 
 function onUtterance(rec: UtteranceRecord, name: string): void {
@@ -241,12 +253,13 @@ async function stop(connection: VoiceConnection): Promise<void> {
     decryptFailureDebugLines: decryptFailureLines,
     daveDebugLines: daveLines,
     reconnects,
+    resubscribes,
     events,
   };
   writeFileSync(join(sessionDir, 'report.json'), JSON.stringify(report, null, 2));
 
   console.log('\n===== M0 receive report =====');
-  console.log(`Duration: ${report.durationSec}s  Reconnects: ${reconnects}  Decrypt-failure debug lines: ${decryptFailureLines}`);
+  console.log(`Duration: ${report.durationSec}s  Reconnects: ${reconnects}  Resubscribes: ${resubscribes}  Decrypt-failure debug lines: ${decryptFailureLines}`);
   for (const [id, s] of stats) {
     console.log(
       `  REC  ${s.name} (${id}): ${s.utterances} utterances, ${(s.audioMs / 1000).toFixed(1)}s audio, ` +
