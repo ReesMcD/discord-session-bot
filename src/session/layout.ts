@@ -58,7 +58,7 @@ export function listUtterances(sessionDir: string): UtteranceFile[] {
   if (!existsSync(audioDir)) return [];
   const out: UtteranceFile[] = [];
   for (const userId of readdirSync(audioDir)) {
-    if (!/^\d+$/.test(userId)) continue;
+    if (!/^[\w-]+$/.test(userId)) continue;
     for (const name of readdirSync(join(audioDir, userId))) {
       const m = /^(\d+)\.ogg$/.exec(name);
       if (m) out.push({ userId, startMs: Number(m[1]), path: join(audioDir, userId, name) });

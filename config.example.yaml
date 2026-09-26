@@ -32,3 +32,26 @@ transcript:
   merge_gap_seconds: 2
   max_line_seconds: 60
   # timezone: America/New_York   # defaults to the machine's time zone
+
+summary:
+  model: claude-opus-5        # any Claude model ID; claude-sonnet-5 is cheaper
+  # low = a few highlights · medium = organised notes · high = thorough, nothing relevant left out
+  detail: medium
+  cite_timestamps: true       # "[01:23:45]" after each point
+  # What the summary captures. Each rule becomes a section, in this order.
+  include:
+    - Main topics discussed
+    - Decisions made
+    - Action items and who owns them
+    - Open questions and unresolved issues
+  # Dropped even if they match an include rule.
+  exclude: []
+  #  - Small talk and off-topic banter
+  # Background Claude should know about these calls.
+  # context: |
+  #   Weekly D&D campaign. Rees is the DM; the others are players (Sam plays Thorin).
+  chunk_minutes: 20           # transcript is read in pieces this long
+  extract_effort: medium      # low | medium | high | xhigh | max
+  synthesize_effort: high
+  fallbacks: true             # if Claude declines a request, retry it on Anthropic's recommended fallback model
+  # prompts_dir: ./my-prompts # extract.md / synthesize.md here override the built-in prompts

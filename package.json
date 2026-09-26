@@ -15,9 +15,13 @@
     "spike:mix": "tsx src/spike/mix.ts",
     "transcribe": "tsx src/cli/transcribe.ts",
     "merge": "tsx src/cli/merge.ts",
-    "check:deps": "tsx scripts/check-deps.ts"
+    "check:deps": "tsx scripts/check-deps.ts",
+    "import:craig": "tsx src/cli/importCraig.ts",
+    "summarize": "tsx src/cli/summarize.ts",
+    "doctor": "tsx src/cli/doctor.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@discordjs/voice": "0.19.2",
     "discord.js": "^14.27.0",
     "yaml": "^2.9.1",
