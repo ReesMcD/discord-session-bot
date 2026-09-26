@@ -11,6 +11,7 @@ README.md, **live-testing steps in TESTING.md**.
 - `npm run spike:receive -- --channel <id> --minutes N`: voice-receive test recorder
 - `npm run spike:mix -- <session>` · `npm run transcribe -- <session> [--summarize]` · `npm run merge -- <session>`
 - `npm run import:craig -- <zip|folder> [--summarize]` · `npm run summarize -- <session> [--force]`
+- `npm run disambiguate -- <session>`: label who's speaking on shared accounts (`speakers.<id>.disambiguate`)
 
 ## Rules
 

@@ -34,6 +34,15 @@ reconnects, crash recovery) waits on M0.
 
 Two-pass (chunked extract → synthesize) with Claude, include/exclude rules, detail level, cite_timestamps, versioned prompt templates, `/summarize <session>`. Model configurable.
 
+### Shared-account speaker labelling
+
+**Status:** built (`npm run disambiguate`, and run automatically by `summarize`), tested offline; needs
+a live run. For a Discord account shared by several people (or one person in several roles),
+`speakers.<id>.disambiguate` lists the identities. Before the summary, Claude labels each of that
+account's lines from context (versioned prompt `prompts/disambiguate.v1.md`, cached per chunk).
+The output is `transcript.speakers.md`, with `(?)` for guesses and `(unclear)` when it can't tell.
+Audio-based diarization is out of scope.
+
 ## Phase 3 — Publishing
 
 `Publisher` interface; `publish:` in config is a list of destinations. GitHub (single commit per session) first; Discord attachment becomes a publisher; others (Drive, Notion, webhook) pluggable. `ConfigSource` interface (local file | GitHub).

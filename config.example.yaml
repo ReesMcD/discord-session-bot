@@ -16,6 +16,14 @@ recording:
 speakers: {}
 #  "123456789012345678": Rees
 #  "223456789012345678": Sam
+#
+#  An account several people share (or one person voicing several roles): list who talks on it and
+#  Claude labels each line before summarizing. The text before " — " is the name used in transcripts.
+#  "323456789012345678":
+#    name: Rees
+#    disambiguate:
+#      - "DM — narrates the world and voices NPCs"
+#      - "Hamqueef — a player character"
 
 transcription:
   provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)

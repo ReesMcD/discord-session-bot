@@ -1,4 +1,4 @@
-import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
+import { displaySpeaker, formatOffset, type TranscriptLine } from '../transcript/merge.js';
 
 export interface Chunk {
   index: number;
@@ -56,7 +56,7 @@ export function chunkTranscript(lines: readonly TranscriptLine[], opts: ChunkOpt
 }
 
 export function formatLine(line: TranscriptLine, prefix = ''): string {
-  return `${prefix}[${formatOffset(line.offsetMs)}] ${line.speaker}: ${line.text}`;
+  return `${prefix}[${formatOffset(line.offsetMs)}] ${displaySpeaker(line)}: ${line.text}`;
 }
 
 export function formatChunk(chunk: Chunk, total: number): string {
