@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Config } from '../config/schema.js';
+import { sharedAccounts, type Config } from '../config/schema.js';
+import { contextBlock } from './context.js';
+import { disambiguateSession } from './disambiguate.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
 import { mapLimit } from '../util/retry.js';
@@ -37,19 +39,6 @@ function numbered(rules: readonly string[]): string {
 
 function bullets(rules: readonly string[], none: string): string {
   return rules.length ? rules.map((r) => `- ${r}`).join('\n') : none;
-}
-
-function contextBlock(session: SessionInfo, lines: readonly TranscriptLine[], context: string | undefined, timeZone: string | undefined): string {
-  const speakers = [...new Set(lines.map((l) => l.speaker))].join(', ');
-  const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'full', ...(timeZone ? { timeZone } : {}) }).format(session.startedAt);
-  return [
-    '## About this call',
-    '',
-    `- Date: ${date}`,
-    ...(session.channelName ? [`- Channel: #${session.channelName}${session.guildName ? ` in ${session.guildName}` : ''}`] : []),
-    `- Speakers: ${speakers}`,
-    ...(context ? ['', context.trim()] : []),
-  ].join('\n');
 }
 
 function hash(...parts: string[]): string {
@@ -91,7 +80,9 @@ export interface SummaryMeta {
   chunks: number;
   chunksFromCache: number;
   items: number;
-  usage: { extract: Usage; synthesize: Usage };
+  usage: { extract: Usage; synthesize: Usage; disambiguate?: Usage };
+  /** Present when shared accounts were relabelled before summarizing. */
+  speakerLabels?: { labelled: number; confident: number; guessed: number; unclear: number };
 }
 
 /**
@@ -105,8 +96,24 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
   const s = config.summary;
   const data = readJson<{ session: SessionInfo; lines: TranscriptLine[] }>(paths.segments(sessionDir));
   if (!data) throw new Error(`No transcript in ${sessionDir}; run transcribe (or merge) first`);
-  const { session, lines } = data;
+  const { session } = data;
+  let lines = data.lines;
   if (!lines.length) throw new Error('The transcript is empty; nothing to summarize');
+
+  // Optional: relabel lines on shared Discord accounts before summarizing (speakers.<id>.disambiguate).
+  const used = new Set<string>();
+  let labelling: Awaited<ReturnType<typeof disambiguateSession>> | undefined;
+  if ([...sharedAccounts(config).keys()].some((id) => lines.some((l) => l.userId === id))) {
+    labelling = await disambiguateSession(sessionDir, config, model, {
+      ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
+      ...(opts.force ? { force: true } : {}),
+      log,
+    });
+    lines = labelling.lines;
+    for (const m of labelling.modelsUsed) used.add(m);
+    const st = labelling.stats;
+    log(`  ${st.labelled} lines on shared accounts: ${st.confident} confident, ${st.guessed} guessed, ${st.unclear} unclear → ${labelling.file}`);
+  }
 
   const about = contextBlock(session, lines, s.context, config.transcript.timezone);
   const exclude = bullets(s.exclude, '- (no extra exclusions)');
@@ -118,7 +125,6 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
   log(`Extracting from ${chunks.length} chunk(s) with ${s.model}…`);
 
   let fromCache = 0;
-  const used = new Set<string>();
   const extractUsage: Usage = { inputTokens: 0, outputTokens: 0 };
   const results = await mapLimit(chunks, opts.concurrency ?? 3, async (chunk) => {
     const user = formatChunk(chunk, chunks.length);
@@ -184,13 +190,18 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
     generatedAt: new Date().toISOString(),
     requestedModel: s.model,
     modelsUsed: [...used].sort(),
-    promptVersions: { extract: `${extractT.version}#${extractT.hash}`, synthesize: `${synthT.version}#${synthT.hash}` },
+    promptVersions: {
+      ...(labelling ? { disambiguate: labelling.promptVersion } : {}),
+      extract: `${extractT.version}#${extractT.hash}`,
+      synthesize: `${synthT.version}#${synthT.hash}`,
+    },
     configHash,
     detail: s.detail,
     chunks: chunks.length,
     chunksFromCache: fromCache,
     items: items.length,
-    usage: { extract: extractUsage, synthesize: synthUsage },
+    usage: { extract: extractUsage, synthesize: synthUsage, ...(labelling ? { disambiguate: labelling.usage } : {}) },
+    ...(labelling ? { speakerLabels: labelling.stats } : {}),
   };
   writeJson(summaryPaths.meta(sessionDir), meta);
   return { file, meta };

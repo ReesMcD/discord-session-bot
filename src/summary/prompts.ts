@@ -8,7 +8,7 @@ export const PROMPT_VERSION = 'v1';
 
 const BUILT_IN_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 
-export type PromptName = 'extract' | 'synthesize';
+export type PromptName = 'extract' | 'synthesize' | 'disambiguate';
 
 export interface Template {
   name: PromptName;

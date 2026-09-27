@@ -5,6 +5,17 @@ const snowflake = z.preprocess(
   z.string().regex(/^\d{15,22}$/, 'must be a Discord ID (15–22 digits)'),
 );
 
+const sharedSpeaker = z
+  .object({
+    name: z.string().min(1).optional(),
+    /**
+     * The people/roles who talk on this account, e.g. "DM — narrates the world and NPCs". The text
+     * before " — ", " – ", " - " or ":" is the label used in transcripts; the rest is a hint for Claude.
+     */
+    disambiguate: z.array(z.string().min(1)).min(2, 'list at least two identities to choose between').optional(),
+  })
+  .strict();
+
 export const configSchema = z
   .object({
     recording: z
@@ -21,8 +32,11 @@ export const configSchema = z
       .strict()
       .default({ ignore_users: [], ignore_bots: true, silence_ms: 1000, audio_retention_days: 30 }),
 
-    /** Discord user ID → name to use in transcripts. Falls back to the Discord display name. */
-    speakers: z.record(snowflake, z.string().min(1)).default({}),
+    /**
+     * Discord user ID → name to use in transcripts (falls back to the Discord display name), or an
+     * object for an account several people share: `{ name, disambiguate: [identities…] }`.
+     */
+    speakers: z.record(snowflake, z.union([z.string().min(1), sharedSpeaker])).default({}),
 
     transcription: z
       .object({
@@ -81,7 +95,7 @@ export const configSchema = z
         context: z.string().optional(),
         /** Transcript is processed in chunks of this many minutes. */
         chunk_minutes: z.number().min(5).max(60).default(20),
-        /** Folder with prompt templates overriding the built-in ones (extract.md / synthesize.md). */
+        /** Folder with prompt templates overriding the built-in ones (extract.md / synthesize.md / disambiguate.md). */
         prompts_dir: z.string().optional(),
       })
       .strict()
@@ -90,3 +104,36 @@ export const configSchema = z
   .strict();
 
 export type Config = z.infer<typeof configSchema>;
+
+export interface Identity {
+  /** Short label used in transcripts, e.g. "DM". */
+  label: string;
+  /** The full hint as written in the config. */
+  description: string;
+}
+
+/** Splits "DM — narrates the world" into a label ("DM") and the full description. */
+export function parseIdentity(text: string): Identity {
+  const m = /^(.+?)\s+[—–-]\s+|^(.+?):\s*/.exec(text);
+  const label = (m?.[1] ?? m?.[2] ?? text).trim();
+  return { label, description: text.trim() };
+}
+
+/** userId → transcript name, for every configured speaker that has one. */
+export function speakerNames(config: Pick<Config, 'speakers'>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, v] of Object.entries(config.speakers)) {
+    const name = typeof v === 'string' ? v : v.name;
+    if (name) out[id] = name;
+  }
+  return out;
+}
+
+/** userId → identities, for accounts configured with `disambiguate`. */
+export function sharedAccounts(config: Pick<Config, 'speakers'>): Map<string, Identity[]> {
+  const out = new Map<string, Identity[]>();
+  for (const [id, v] of Object.entries(config.speakers)) {
+    if (typeof v !== 'string' && v.disambiguate) out.set(id, v.disambiguate.map(parseIdentity));
+  }
+  return out;
+}

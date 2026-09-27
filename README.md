@@ -226,11 +226,41 @@ It runs in two passes:
 **Tuning:** edit `summary:` in `config.yaml` and run it again. Chunks whose inputs didn't change
 are reused, so changing only `detail` or `cite_timestamps` just redoes the final write-up.
 
+### E. Shared accounts (two people on one mic)
+
+The bot records one track per Discord **account**. If two people share an account (or one person
+plays several roles, like a DM who narrates and voices NPCs), their lines all come out under one
+name. You can't split them apart from the audio, but Claude can usually tell from context who's
+speaking. List the identities in `config.yaml`:
+
+```yaml
+speakers:
+  "123456789012345678":
+    name: Rees
+    disambiguate:
+      - "DM — narrates the world and voices NPCs"
+      - "Hamqueef — a player character"
+```
+
+The text before ` — ` is the name used in transcripts; the rest is a hint for Claude.
+`npm run summarize` then runs an extra pass first:
+
+- Each of that account's lines is labelled with one identity. Claude sees the whole conversation, not just this account.
+- `transcript.speakers.md` is written next to `transcript.md`. Lines are shown as `Hamqueef (?)`
+  when Claude was guessing, and as `Rees (unclear)` when it couldn't tell.
+- The summary is built from the relabelled transcript. `transcript.md` itself stays exactly as recorded.
+
+To check the labels without summarizing, run `npm run disambiguate -- <session>`. Short replies
+like "Yeah" are often guesses; that's expected and rarely matters for the summary. Accounts
+without `disambiguate` are unaffected. Their lines are joined into turns as usual, while a shared
+account's lines are kept separate so each one can be labelled.
+
 ### What's in a session folder
 
 ```
 data/sessions/<session-id>/
   transcript.md             ← the transcript
+  transcript.speakers.md    ← relabelled transcript (only with shared accounts)
   summary.md                ← the summary
   session.json              when/where it was recorded
   participants.json         Discord names at recording time
@@ -253,7 +283,7 @@ data/sessions/<session-id>/
 | `recording.ignore_bots` | `true` | Skip every bot account |
 | `recording.silence_ms` | `1000` | Silence that ends an utterance (also used to split Craig tracks) |
 | `recording.audio_retention_days` | `30` | How long to keep audio once processed (used once the full bot lands) |
-| `speakers` | `{}` | `userId: Name` for transcripts; otherwise the Discord display name is used |
+| `speakers` | `{}` | `userId: Name` for transcripts (otherwise the Discord display name), or `userId: {name, disambiguate: [...]}` for a [shared account](#e-shared-accounts-two-people-on-one-mic) |
 | `transcription.provider` | `groq` | `groq` or `openai` |
 | `transcription.model` | per provider | Groq: `whisper-large-v3-turbo`; OpenAI: `whisper-1` |
 | `transcription.base_url` | per provider | Any OpenAI-compatible transcription server |
@@ -274,7 +304,7 @@ data/sessions/<session-id>/
 | `summary.chunk_minutes` | `20` | Size of each piece of the transcript read in the first pass |
 | `summary.extract_effort` / `synthesize_effort` | `medium` / `high` | How hard Claude thinks in each pass (`low` … `max`) |
 | `summary.fallbacks` | `true` | If Claude declines a request, retry it on Anthropic's recommended backup model |
-| `summary.prompts_dir` | none | Folder with your own `extract.md` / `synthesize.md` (start from `prompts/*.v1.md`) |
+| `summary.prompts_dir` | none | Folder with your own `extract.md` / `synthesize.md` / `disambiguate.md` (start from `prompts/*.v1.md`) |
 
 Secrets never go in `config.yaml`; they live in `.env`.
 

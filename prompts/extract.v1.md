@@ -23,6 +23,8 @@ Anything that matches an exclude rule is dropped even if it also matches an incl
 - `speakers`: the names of the people involved, spelled as they appear in the transcript.
 - `detail`: one to three plain sentences that someone who wasn't on the call could understand on their own. Name who said or decided what, and keep the specifics (names, numbers, dates, owners).
 
+Some speaker names were inferred from context because several people share one Discord account: `Name (?)` means a likely but uncertain guess, and `Name (unclear)` means it could be any of the people on that account. Attribute such lines cautiously.
+
 Lines marked `(context)` come from the end of the previous section and are there so you understand how this section begins. Don't extract items from them.
 
 Return an empty list if nothing in this section matches.

@@ -14,6 +14,18 @@ export const extractionSchema = z.object({
 });
 
 export type Extraction = z.infer<typeof extractionSchema>;
+
+export const labelSchema = z.object({
+  labels: z.array(
+    z.object({
+      line: z.number().int().describe('The #N number of the line'),
+      speaker: z.number().int().describe("Number of the identity speaking, or 0 if you can't tell"),
+      confident: z.boolean(),
+    }),
+  ),
+});
+
+export type Labels = z.infer<typeof labelSchema>;
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface Usage {
@@ -35,8 +47,10 @@ export interface CallOptions {
   user: string;
 }
 
-/** The two model calls the summarizer makes; swapped for a fake in tests. */
+/** The model calls the summarizer makes; swapped for a fake in tests. */
 export interface SummaryModel {
+  /** Labels which identity speaks each numbered line of a shared account. */
+  disambiguate(opts: CallOptions): Promise<CallResult<Labels>>;
   extract(opts: CallOptions): Promise<CallResult<Extraction>>;
   synthesize(opts: CallOptions): Promise<CallResult<string>>;
 }
@@ -77,18 +91,26 @@ export class AnthropicSummaryModel implements SummaryModel {
     return this.options.fallbacks ? { betas: [FALLBACK_BETA], fallbacks: 'default' as const } : {};
   }
 
-  async extract(opts: CallOptions): Promise<CallResult<Extraction>> {
+  private async parse<T>(opts: CallOptions, schema: z.ZodType<T>, step: string): Promise<CallResult<T>> {
     const msg = await this.client.beta.messages.parse({
       model: opts.model,
       max_tokens: 16_000,
       system: opts.system,
       messages: [{ role: 'user', content: opts.user }],
-      output_config: { effort: opts.effort, format: betaZodOutputFormat(extractionSchema) },
+      output_config: { effort: opts.effort, format: betaZodOutputFormat(schema) },
       ...this.fallbackParams(),
     });
-    checkStop(msg, 'extraction');
-    if (!msg.parsed_output) throw new SummaryError('Extraction returned no parseable JSON');
-    return { value: msg.parsed_output, model: msg.model, usage: usageOf(msg.usage) };
+    checkStop(msg, step);
+    if (!msg.parsed_output) throw new SummaryError(`The ${step} step returned no parseable JSON`);
+    return { value: msg.parsed_output as T, model: msg.model, usage: usageOf(msg.usage) };
+  }
+
+  extract(opts: CallOptions): Promise<CallResult<Extraction>> {
+    return this.parse(opts, extractionSchema, 'extraction');
+  }
+
+  disambiguate(opts: CallOptions): Promise<CallResult<Labels>> {
+    return this.parse(opts, labelSchema, 'speaker-labelling');
   }
 
   async synthesize(opts: CallOptions): Promise<CallResult<string>> {

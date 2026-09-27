@@ -65,6 +65,9 @@ test('formatExtractions groups by rule in time order', () => {
 class FakeModel implements SummaryModel {
   extractCalls: CallOptions[] = [];
   synthCalls: CallOptions[] = [];
+  async disambiguate(): Promise<never> {
+    throw new Error('no shared accounts configured in this test');
+  }
   async extract(opts: CallOptions) {
     this.extractCalls.push(opts);
     const value: Extraction = {
