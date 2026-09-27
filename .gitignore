@@ -7,3 +7,5 @@ data/
 config.yaml
 prompts.local/
 web/dist/
+dist-electron/
+release/

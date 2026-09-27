@@ -35,7 +35,7 @@ export function App() {
       </header>
       {page === 'sessions' && !id && <SessionsPage />}
       {page === 'sessions' && id && <SessionPage id={id} />}
-      {page === 'settings' && <SettingsPage />}
+      {page === 'settings' && <SettingsPage initial={id} />}
       {page === 'record' && <RecordPage />}
       {!['sessions', 'settings', 'record'].includes(page) && <SessionsPage />}
     </div>

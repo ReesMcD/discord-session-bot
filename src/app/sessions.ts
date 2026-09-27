@@ -24,6 +24,8 @@ export interface SessionSummary {
   channelName?: string;
   guildName?: string;
   source?: string;
+  /** Closed by crash recovery rather than a normal stop. */
+  interrupted?: boolean;
   speakers: string[];
   utterances: number;
   has: { audio: boolean; transcript: boolean; speakerLabels: boolean; summary: boolean };
@@ -36,7 +38,7 @@ function segmentsOf(dir: string, file: string): { session?: SessionInfo; lines: 
 export function describeSession(dataDir: string, id: string): SessionSummary | undefined {
   const dir = sessionDirFor(dataDir, id);
   if (!dir) return undefined;
-  const info = readSessionInfo(dir) as SessionInfo & { source?: string };
+  const info = readSessionInfo(dir) as SessionInfo & { source?: string; interrupted?: boolean };
   const participants = readParticipants(dir);
   const utterances = listUtterances(dir);
   const lines = segmentsOf(dir, paths.segments(dir)).lines;
@@ -50,6 +52,7 @@ export function describeSession(dataDir: string, id: string): SessionSummary | u
     ...(info.channelName ? { channelName: info.channelName } : {}),
     ...(info.guildName ? { guildName: info.guildName } : {}),
     ...(info.source ? { source: info.source } : {}),
+    ...(info.interrupted ? { interrupted: true } : {}),
     speakers,
     utterances: utterances.length,
     has: {

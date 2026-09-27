@@ -1,4 +1,4 @@
-import type { Job } from './types';
+import type { BotStatus, Job } from './types';
 
 // Same-origin by default; set VITE_API_URL when the UI is hosted elsewhere (e.g. Vercel).
 const BASE = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api`;
@@ -76,8 +76,12 @@ export async function downloadFile(sessionId: string, name: string): Promise<voi
   URL.revokeObjectURL(url);
 }
 
-/** Live job updates over server-sent events (fetch-based so the password header can be sent). */
-export function subscribeJobs(onJob: (job: Job) => void): () => void {
+type Listener = { onJob?: (job: Job) => void; onBot?: (status: BotStatus) => void };
+const listeners = new Set<Listener>();
+let stopStream: (() => void) | undefined;
+
+/** One shared server-sent-events stream (fetch-based so the password header can be sent). */
+function startStream(): () => void {
   let stopped = false;
   let controller: AbortController | undefined;
   const run = async () => {
@@ -98,7 +102,9 @@ export function subscribeJobs(onJob: (job: Job) => void): () => void {
             buf = buf.slice(idx + 2);
             const event = /^event: (.*)$/m.exec(chunk)?.[1];
             const data = /^data: (.*)$/m.exec(chunk)?.[1];
-            if (event === 'job' && data) onJob(JSON.parse(data) as Job);
+            if (!data) continue;
+            if (event === 'job') listeners.forEach((l) => l.onJob?.(JSON.parse(data) as Job));
+            if (event === 'bot') listeners.forEach((l) => l.onBot?.(JSON.parse(data) as BotStatus));
           }
         }
       } catch {
@@ -112,4 +118,20 @@ export function subscribeJobs(onJob: (job: Job) => void): () => void {
     stopped = true;
     controller?.abort();
   };
+}
+
+export function subscribe(listener: Listener): () => void {
+  listeners.add(listener);
+  if (!stopStream) stopStream = startStream();
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      stopStream?.();
+      stopStream = undefined;
+    }
+  };
+}
+
+export function subscribeJobs(onJob: (job: Job) => void): () => void {
+  return subscribe({ onJob });
 }

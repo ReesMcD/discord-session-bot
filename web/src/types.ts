@@ -4,7 +4,14 @@ export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type SharedSpeaker = { name?: string; disambiguate?: string[] };
 
 export interface Config {
-  recording: { ignore_users: string[]; ignore_bots: boolean; silence_ms: number; audio_retention_days: number };
+  recording: {
+    ignore_users: string[];
+    ignore_bots: boolean;
+    silence_ms: number;
+    audio_retention_days: number;
+    after_stop: 'nothing' | 'transcribe' | 'summarize';
+    announce: boolean;
+  };
   speakers: Record<string, string | SharedSpeaker>;
   transcription: {
     provider: 'groq' | 'openai';
@@ -52,6 +59,7 @@ export interface SessionSummary {
   channelName?: string;
   guildName?: string;
   source?: string;
+  interrupted?: boolean;
   speakers: string[];
   utterances: number;
   has: { audio: boolean; transcript: boolean; speakerLabels: boolean; summary: boolean };
@@ -112,4 +120,49 @@ export interface PromptInfo {
   placeholders: string[];
   builtIn: string;
   custom: string | null;
+}
+
+export interface RecordingStatus {
+  sessionId: string;
+  guildId: string;
+  guildName: string;
+  channelId: string;
+  channelName: string;
+  startedAt: number;
+  state: 'connecting' | 'recording' | 'reconnecting' | 'stopping';
+  participants: { id: string; name: string; utterances: number; audioMs: number; speaking: boolean }[];
+  skipped: { id: string; name: string; reason: string }[];
+  reconnects: number;
+}
+
+export interface BotStatus {
+  state: 'off' | 'connecting' | 'ready' | 'error';
+  user?: string;
+  error?: string;
+  recording: RecordingStatus | null;
+}
+
+export interface GuildInfo {
+  id: string;
+  name: string;
+  channels: { id: string; name: string; members: { id: string; name: string; bot: boolean }[] }[];
+}
+
+/** Present only inside the Mac app (see electron/preload.cts). */
+export interface DesktopBridge {
+  version(): Promise<string>;
+  getKeys(): Promise<Record<'discord' | 'groq' | 'anthropic' | 'password', boolean>>;
+  setKeys(keys: Partial<Record<'discord' | 'groq' | 'anthropic', string>>): Promise<{ restarted: boolean }>;
+  getPhoneAccess(): Promise<{ password: string; port: number }>;
+  resetPassword(): Promise<{ password: string }>;
+  copy(text: string): Promise<void>;
+  openExternal(url: string): Promise<void>;
+  dataFolder(): Promise<string>;
+  revealDataFolder(): Promise<void>;
+}
+
+declare global {
+  interface Window {
+    sessionBot?: DesktopBridge;
+  }
 }

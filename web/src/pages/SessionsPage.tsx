@@ -34,6 +34,8 @@ export function SessionsPage() {
             {s.speakers.length > 0 && ` · ${s.speakers.join(', ')}`}
           </div>
           <div className="row">
+            {s.source === 'bot' && !s.stoppedAt && <Badge tone="bad">● Recording now</Badge>}
+            {s.interrupted && <Badge tone="warn">Cut short (app closed mid-call)</Badge>}
             {s.source === 'craig' && <Badge>Craig import</Badge>}
             <Badge tone={s.has.transcript ? 'good' : 'neutral'}>{s.has.transcript ? 'Transcript' : s.has.audio ? `${s.utterances} clips, not transcribed` : 'No audio'}</Badge>
             {s.has.speakerLabels && <Badge tone="accent">Speakers labelled</Badge>}

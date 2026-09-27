@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # The Mac app is built by mac-app.yml; tests don't need the Electron binary.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
 jobs:
   test:
     name: ${{ matrix.os }}
@@ -32,3 +36,5 @@ jobs:
       - run: npm test
       - run: npm run web:typecheck
       - run: npm run web:build
+      - run: npm run mac:typecheck
+      - run: npm run mac:build-main

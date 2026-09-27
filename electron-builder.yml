@@ -1,0 +1,43 @@
+appId: com.reesmcd.sessionbot
+productName: Session Bot
+copyright: Copyright © 2026 Rees McDevitt
+directories:
+  output: release
+  buildResources: electron/assets
+files:
+  - dist-electron/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  - from: web/dist
+    to: web
+  - from: prompts
+    to: prompts
+  - from: electron/assets
+    to: assets
+    filter: ["tray*.png"]
+# Native code and ffmpeg must live outside the asar archive to be executable.
+asarUnpack:
+  - "**/*.node"
+  - node_modules/ffmpeg-static/**
+  - node_modules/@snazzah/**
+npmRebuild: false
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  category: public.app-category.productivity
+  icon: electron/assets/icon.png
+  # No Apple Developer ID: the app is ad-hoc signed. First launch needs right-click → Open
+  # (or System Settings → Privacy & Security → Open Anyway).
+  identity: null
+  extendInfo:
+    LSUIElement: true
+dmg:
+  title: Session Bot
+  artifactName: Session-Bot-${version}-${arch}.${ext}
+zip:
+  artifactName: Session-Bot-${version}-${arch}-mac.${ext}
+publish: null

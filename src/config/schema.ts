@@ -28,9 +28,13 @@ export const configSchema = z
         silence_ms: z.number().int().min(200).max(10_000).default(1000),
         /** Delete local audio this many days after a session is processed. 0 = keep forever. */
         audio_retention_days: z.number().int().min(0).default(30),
+        /** What to do automatically when a recording stops. */
+        after_stop: z.enum(['nothing', 'transcribe', 'summarize']).default('transcribe'),
+        /** Post "recording started/stopped" in the voice channel's chat, so everyone knows. */
+        announce: z.boolean().default(true),
       })
       .strict()
-      .default({ ignore_users: [], ignore_bots: true, silence_ms: 1000, audio_retention_days: 30 }),
+      .prefault({}),
 
     /**
      * Discord user ID → name to use in transcripts (falls back to the Discord display name), or an

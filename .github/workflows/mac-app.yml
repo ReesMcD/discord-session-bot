@@ -1,0 +1,57 @@
+name: Mac app
+
+# Builds "Session Bot.app" on a real Mac, launches it once to check everything starts, and
+# publishes the .dmg:
+#   - every push to main → downloadable from this workflow run (Actions → Mac app → Artifacts)
+#   - a tag like v0.2.0  → a GitHub Release with the .dmg attached (Releases page)
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run mac:typecheck
+      - name: Build the app
+        run: npm run mac:dist
+      - name: Launch it once (smoke test)
+        run: |
+          APP="release/mac-arm64/Session Bot.app"
+          codesign -dv "$APP" 2>&1 | head -5 || true
+          "$APP/Contents/MacOS/Session Bot" --smoke-test 2>&1 | tee smoke.log &
+          PID=$!
+          for i in $(seq 1 90); do
+            if grep -q '^SMOKE ' smoke.log 2>/dev/null; then break; fi
+            sleep 1
+          done
+          wait $PID || true
+          grep '^SMOKE PASS' smoke.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Session-Bot-mac
+          path: |
+            release/*.dmg
+            release/*.zip
+          if-no-files-found: error
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release/*.dmg release/*.zip \
+            --title "Session Bot ${GITHUB_REF_NAME}" \
+            --notes "Download the .dmg, open it and drag Session Bot to Applications. First launch: right-click the app → Open (see README → Install the Mac app)." \
+            || gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip --clobber

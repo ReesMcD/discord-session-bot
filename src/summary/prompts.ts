@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 /** Bump when the built-in templates change meaningfully; recorded in each summary's metadata. */
 export const PROMPT_VERSION = 'v1';
 
-const BUILT_IN_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
+/** Built-in templates ship in prompts/; a packaged app points PROMPTS_BUILTIN_DIR at its bundled copy. */
+const builtInDir = () => process.env.PROMPTS_BUILTIN_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 
 export type PromptName = 'extract' | 'synthesize' | 'disambiguate';
 
@@ -22,7 +23,7 @@ export interface Template {
 /** Loads a prompt template: `<overrideDir>/<name>.md` if present, else the built-in versioned file. */
 export function loadTemplate(name: PromptName, overrideDir?: string): Template {
   const override = overrideDir ? join(resolve(overrideDir), `${name}.md`) : undefined;
-  const file = override && existsSync(override) ? override : join(BUILT_IN_DIR, `${name}.${PROMPT_VERSION}.md`);
+  const file = override && existsSync(override) ? override : join(builtInDir(), `${name}.${PROMPT_VERSION}.md`);
   const text = readFileSync(file, 'utf8');
   return { name, version: file === override ? `custom:${override}` : PROMPT_VERSION, text, hash: createHash('sha256').update(text).digest('hex').slice(0, 16) };
 }

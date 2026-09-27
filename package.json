@@ -1,6 +1,6 @@
 {
   "name": "discord-session-bot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Self-hosted Discord bot that records voice calls per speaker and produces timestamped transcripts.",
   "type": "module",
@@ -23,13 +23,19 @@
     "app": "tsx src/app/server.ts",
     "web:dev": "vite --config web/vite.config.ts",
     "web:build": "vite build --config web/vite.config.ts",
-    "web:typecheck": "tsc -p web/tsconfig.json"
+    "web:typecheck": "tsc -p web/tsconfig.json",
+    "mac:build-main": "node scripts/build-electron.mjs",
+    "mac:typecheck": "tsc -p electron/tsconfig.json",
+    "mac:dev": "npm run web:build && npm run mac:build-main && electron .",
+    "mac:dist": "npm run web:build && npm run mac:build-main && electron-builder --mac --arm64 --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "@discordjs/voice": "0.19.2",
     "@hono/node-server": "^2.1.1",
+    "@noble/ciphers": "^2.4.0",
     "discord.js": "^14.27.0",
+    "ffmpeg-static": "^5.3.0",
     "hono": "^4.13.9",
     "yaml": "^2.9.1",
     "zod": "^4.6.5"
@@ -39,10 +45,15 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
-  }
+  },
+  "main": "dist-electron/main.mjs",
+  "author": "Rees McDevitt"
 }

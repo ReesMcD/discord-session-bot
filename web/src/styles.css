@@ -120,3 +120,14 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .markdown h2 { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
 .log { background: var(--surface-2); border-radius: 10px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; max-height: 220px; overflow: auto; white-space: pre-wrap; margin-top: 8px; }
 .login { max-width: 360px; margin: 12vh auto 0; }
+
+/* Recording */
+.recording { border-color: var(--bad); }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--bad); animation: pulse 1.4s ease-in-out infinite; }
+.elapsed { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.participant { padding: 6px 0; border-bottom: 1px solid var(--surface-2); }
+.speak-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: background 0.1s; }
+.speak-dot.on { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 25%, transparent); }
+button.stop { width: 100%; margin-top: 16px; border-color: var(--bad); font-size: 1rem; min-height: 48px; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
