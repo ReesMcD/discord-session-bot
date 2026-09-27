@@ -109,6 +109,20 @@ This is the go/no-go test: can the bot hear Discord's end-to-end encrypted voice
 - [ ] `Decrypt-failure debug lines` is small (a handful around the leave and rejoin is expected);
 - [ ] `transcript.md` reads correctly.
 
+### 2.4 The web app (optional, 10 min)
+
+```sh
+npm run web:build
+npm run app
+```
+
+Needs `APP_PASSWORD` in `.env`.
+
+- [ ] <http://localhost:4400> on the Mac: sign in, open a session, and read the transcript and summary.
+- [ ] Settings: change the summary detail level, then save. `config.yaml` has the new value, and its comments are still there.
+- [ ] On the phone, over Tailscale (README section F): the same pages work.
+- [ ] Press **Rebuild transcript** on a session. The log shows the job finishing.
+
 ## 3. What to send back
 
 Paste these into this chat (the cloud session that built the code), or into a new one:

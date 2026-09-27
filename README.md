@@ -16,6 +16,7 @@ speaker-labelled transcript, and summarize them with Claude. It all runs on your
 | Import a [Craig](https://craig.chat) recording instead | `npm run import:craig` | Ready |
 | Transcribe (Groq Whisper) | `npm run transcribe` | Ready |
 | Summarize (Claude) | `npm run summarize` | Ready |
+| **Web app** (phone and Mac): sessions, transcripts, summaries, run steps, edit settings and prompts | `npm run app` | Ready. [Joining a channel from the app](#f-the-web-app) comes next |
 | `/record`, `/stop`, `/status` slash commands, auto-posting the transcript | none yet | Next milestone, waiting on the recording test ([PLAN.md](PLAN.md)) |
 | Auto-publishing (e.g. to GitHub) | none yet | Phase 3 |
 
@@ -59,6 +60,7 @@ You only need the keys for the steps you'll use.
 | `GROQ_API_KEY` | Transcription | [console.groq.com/keys](https://console.groq.com/keys) → **Create API Key** |
 | `ANTHROPIC_API_KEY` | Summaries | [platform.claude.com/settings/keys](https://platform.claude.com/settings/keys) → **Create key**. The key (it starts with `sk-ant-`) is shown only once, so copy it straight away. The account needs billing or credits set up. |
 | `DISCORD_TOKEN` | Recording with the bot | See step 4. Not needed if you only import Craig recordings. |
+| `APP_PASSWORD` | The web app | Make one up (8+ characters). The app asks for it on every device. |
 
 ### 4. Create the Discord bot (only for recording with the bot)
 
@@ -255,6 +257,52 @@ like "Yeah" are often guesses; that's expected and rarely matters for the summar
 without `disambiguate` are unaffected. Their lines are joined into turns as usual, while a shared
 account's lines are kept separate so each one can be labelled.
 
+### F. The web app
+
+A small web app to browse sessions, read transcripts and summaries, run each step, and edit every
+setting (ignore list, speaker names, shared accounts, summary rules, prompts). It runs on the Mac
+and works in any browser, including your phone.
+
+**On the Mac:**
+
+```sh
+npm run web:build      # once, and again after pulling updates
+npm run app            # keep this running; Ctrl+C to stop
+```
+
+Open <http://localhost:4400> and sign in with `APP_PASSWORD` from `.env`.
+
+**On your phone:** use [Tailscale](https://tailscale.com), a free private network between your own devices:
+
+1. Install Tailscale on the Mac and on your phone, and sign in to the same account on both.
+2. In the Tailscale app, note the Mac's name (e.g. `mac-mini`).
+3. On the phone, open `http://mac-mini:4400`. Use *Add to Home Screen* to make it feel like an app.
+
+If macOS asks whether `node` may accept incoming connections, allow it.
+
+What's in it:
+
+- **Sessions**: every recording, newest first. Each session has:
+  - its **Summary**, **Speakers labelled** and **Transcript** (searchable, filter by speaker, download);
+  - buttons for **Transcribe**, **Rebuild transcript**, **Label speakers** and **Summarize**, with a live log.
+- **Settings**:
+  - **Recording & people**: pick people to ignore or name from anyone seen in past recordings, and turn on *Shared account* for a Discord account several people use.
+  - **Summary**, **Transcription**: the rest of the options.
+  - **Prompts**: edit Claude's instructions. The built-in prompts are kept, so you can always revert.
+  - **YAML**: raw editing of `config.yaml`.
+
+  Saving keeps the comments in `config.yaml`.
+- **Record**: for now it shows which keys are set. Joining a voice channel from here is the next update.
+
+**Security:** the app controls a bot that records people, so it always needs the password, and
+it's only reachable on your Mac and your Tailscale devices. Don't expose port 4400 to the internet.
+
+**Later on Vercel:** the pages can be hosted on Vercel, but the bot can't. It needs a
+long-running voice connection and local disk, which Vercel doesn't offer, so the bot and API
+stay on the Mac (or an always-on server). The pages are built to call the API from another
+site: build with `VITE_API_URL=https://<your API address>` and list the Vercel URL in
+`APP_CORS_ORIGINS`.
+
 ### What's in a session folder
 
 ```
@@ -323,6 +371,8 @@ Both APIs charge by usage, so check current pricing before relying on these roug
 | Problem | Fix |
 |---|---|
 | Not sure what's wrong | Run `npm run doctor -- --online` first; it checks the tools, keys and config, and says how to fix each problem. |
+| The app says "Web UI not built yet" | Run `npm run web:build`, then restart `npm run app`. |
+| Phone can't open the app | Both devices signed in to Tailscale? Is `npm run app` still running on the Mac? Allow `node` in the macOS firewall prompt. |
 | `DISCORD_TOKEN is not set` / `No API key for groq` / `ANTHROPIC_API_KEY is not set` | Add the key to `.env`, and run commands from the project folder (that's where `.env` is read). |
 | `Discord login failed` | The token is wrong or was reset. Copy a fresh one from the Developer Portal → Bot. |
 | `Voice connection did not become Ready` | The bot needs **View Channels** and **Connect** on that voice channel. Also check the channel ID. |

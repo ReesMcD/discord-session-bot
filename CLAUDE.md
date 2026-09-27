@@ -12,6 +12,8 @@ README.md, **live-testing steps in TESTING.md**.
 - `npm run spike:mix -- <session>` · `npm run transcribe -- <session> [--summarize]` · `npm run merge -- <session>`
 - `npm run import:craig -- <zip|folder> [--summarize]` · `npm run summarize -- <session> [--force]`
 - `npm run disambiguate -- <session>`: label who's speaking on shared accounts (`speakers.<id>.disambiguate`)
+- `npm run web:build` then `npm run app`: web app on :4400 (needs `APP_PASSWORD`). `npm run web:typecheck` checks the UI.
+- Web UI lives in `web/` (React + Vite, its own tsconfig). API in `src/app/` (Hono). Keep them separable: the UI may later be hosted on Vercel, but the bot/API never can.
 
 ## Rules
 
