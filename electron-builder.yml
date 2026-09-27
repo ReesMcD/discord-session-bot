@@ -35,9 +35,8 @@ mac:
   identity: null
   extendInfo:
     LSUIElement: true
+  artifactName: Session-Bot-${version}-${arch}-mac.${ext}
 dmg:
   title: Session Bot
   artifactName: Session-Bot-${version}-${arch}.${ext}
-zip:
-  artifactName: Session-Bot-${version}-${arch}-mac.${ext}
 publish: null

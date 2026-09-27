@@ -53,9 +53,16 @@ same process, and it can be moved to Vercel later. Phone access is over Tailscal
 - **Round 1 (done):** `npm run app`. Sessions list; transcript, speaker-label and summary views;
   run transcribe/merge/label/summarize with live logs (SSE); settings forms that edit `config.yaml`
   while keeping its comments; prompt overrides; raw YAML.
-- **Round 2 (next, = M1):** always-on bot inside the app process: pick a guild/voice channel,
-  Join/Stop, live status (who's being recorded, elapsed time), reconnects, crash recovery.
-- **Later:** live transcript during the call; Vercel-hosted UI; Discord member picker (needs the Server Members intent).
+- **Round 2 (done, = M1):** always-on bot inside the app process: pick a guild/voice channel,
+  Join/Stop, live status (who's being recorded, elapsed time), reconnects, crash recovery,
+  channel announcements, auto transcribe/summarize after stop.
+- **Mac app (done):** Electron menu bar app (`electron/`) with Join & Record, Stop, recent
+  sessions, Open at Login, update notice, and the app window. Keys are stored in the Keychain,
+  ffmpeg is bundled. GitHub Actions builds the arm64 `.dmg` on macOS, smoke-tests it, and
+  publishes Releases on `v*` tags. Ad-hoc signed (no Apple Developer ID).
+- **Later:** live transcript during the call; Discord slash commands; Vercel-hosted UI; Discord
+  member picker (needs the Server Members intent); Developer ID signing and silent auto-update;
+  Intel build.
 
 ## Phase 3 — Publishing
 

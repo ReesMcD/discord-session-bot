@@ -8,22 +8,54 @@ speaker-labelled transcript, and summarize them with Claude. It all runs on your
 [00:12:09] Sam: Fine by me, but who's bringing the rope?
 ```
 
+## Install the Mac app (no terminal needed)
+
+The easiest way to run it is **Session Bot.app**: a menu bar app that contains the bot, the
+transcription and summary steps, and the web app.
+
+1. **Download** the latest `Session-Bot-….dmg` from the
+   [Releases page](https://github.com/ReesMcD/discord-session-bot/releases/latest). It's for
+   Apple Silicon Macs. Open it and drag **Session Bot** into **Applications**.
+2. **First launch:** the app isn't signed with an Apple Developer ID, so macOS blocks it the first
+   time. Open it once, then go to **System Settings → Privacy & Security** and click
+   **Open Anyway**. On older macOS, right-click the app and choose **Open** instead. You only do
+   this once per version.
+3. **Add your keys:** the app opens a welcome screen. Paste your Discord bot token, Groq key and
+   Anthropic key ([where to get them](#3-create-your-api-keys),
+   [how to make the Discord bot](#4-create-the-discord-bot-only-for-recording-with-the-bot)).
+   They're stored encrypted in your Keychain.
+4. **Use it from the menu bar** (the ◎ icon at the top of the screen):
+   - **Join & Record ▸** lists your voice channels and who's in them. Pick one and it starts recording.
+   - The icon turns red and shows the elapsed time. **Stop Recording** ends it, and the session is transcribed (and summarized, if you choose) automatically.
+   - **Open Session Bot** opens the app window: sessions, transcripts, summaries and settings.
+   - **Open at Login** keeps it running after restarts. The Mac won't sleep while it's recording.
+5. **On your phone:** open the app's **Settings → Keys & phone** tab for the steps. They use
+   Tailscale, and your phone signs in with the password shown there.
+
+Your recordings, transcripts, summaries and settings are in `~/Library/Application Support/Session Bot/`.
+The app shows a notice in its menu when a new version is out. Download it and drag it into
+Applications again; your data stays.
+
+Every push to `main` also builds the app. The build is under **Actions → Mac app → the latest
+run → Artifacts**, and you need to be signed in to GitHub to download it. Tagged versions
+(`v0.2.0`, …) are published on the Releases page.
+
 ## What works today
 
-| Step | Command | Status |
+| Feature | Where | Status |
 |---|---|---|
-| Record a call with the bot | `npm run spike:receive` | **Test version.** It records, but has no slash commands yet (see [the recording test](#b-record-with-the-bot-test-version)) |
-| Import a [Craig](https://craig.chat) recording instead | `npm run import:craig` | Ready |
-| Transcribe (Groq Whisper) | `npm run transcribe` | Ready |
-| Summarize (Claude) | `npm run summarize` | Ready |
-| **Web app** (phone and Mac): sessions, transcripts, summaries, run steps, edit settings and prompts | `npm run app` | Ready. [Joining a channel from the app](#f-the-web-app) comes next |
-| `/record`, `/stop`, `/status` slash commands, auto-posting the transcript | none yet | Next milestone, waiting on the recording test ([PLAN.md](PLAN.md)) |
+| Record a call: join a voice channel, one track per speaker, ignore bots/people | Mac app menu bar, or the app's Record tab | Ready, awaiting the first live test ([TESTING.md](TESTING.md)) |
+| Transcribe (Groq Whisper) | Automatic after a recording, or the session's **Transcribe** button, or `npm run transcribe` | Ready |
+| Label speakers on shared accounts | **Label speakers** button, or `npm run disambiguate` | Ready |
+| Summarize (Claude) | **Summarize** button (or automatic), or `npm run summarize` | Ready |
+| Import a [Craig](https://craig.chat) recording | `npm run import:craig` | Ready |
+| Web app on your phone | Tailscale → `http://<Mac name>:4400` | Ready |
+| Discord slash commands (`/record`, `/stop`) | none yet | Planned; the menu bar does this for now |
 | Auto-publishing (e.g. to GitHub) | none yet | Phase 3 |
 
 **Testing on a Mac with Claude Code?** Follow [TESTING.md](TESTING.md).
 
-**The quickest way to a real transcript and summary right now** is to record with Craig, then
-run `npm run import:craig -- <zip> --summarize` (see [Usage A](#a-import-a-craig-recording)).
+The sections below are for running from source with Node (development, or if you'd rather not use the app).
 
 ---
 
@@ -370,6 +402,11 @@ Both APIs charge by usage, so check current pricing before relying on these roug
 
 | Problem | Fix |
 |---|---|
+| Mac app: "Session Bot can't be opened" / "developer cannot be verified" | System Settings → Privacy & Security → **Open Anyway** (once per version). |
+| Mac app: "Session Bot is damaged and can't be opened" | macOS quarantine on unsigned downloads. In Terminal: `xattr -dr com.apple.quarantine "/Applications/Session Bot.app"`, then open it. |
+| Mac app: "Port 4400 is already in use" | Another copy is running (or `npm run app`). Quit it. |
+| Mac app: menu says "Discord bot is off" | Add the token under Settings → Keys & phone. |
+| macOS asks whether Session Bot may accept incoming connections | Allow it if you want phone access; deny if you only use it on the Mac. |
 | Not sure what's wrong | Run `npm run doctor -- --online` first; it checks the tools, keys and config, and says how to fix each problem. |
 | The app says "Web UI not built yet" | Run `npm run web:build`, then restart `npm run app`. |
 | Phone can't open the app | Both devices signed in to Tailscale? Is `npm run app` still running on the Mac? Allow `node` in the macOS firewall prompt. |

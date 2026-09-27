@@ -14,6 +14,8 @@ README.md, **live-testing steps in TESTING.md**.
 - `npm run disambiguate -- <session>`: label who's speaking on shared accounts (`speakers.<id>.disambiguate`)
 - `npm run web:build` then `npm run app`: web app on :4400 (needs `APP_PASSWORD`). `npm run web:typecheck` checks the UI.
 - Web UI lives in `web/` (React + Vite, its own tsconfig). API in `src/app/` (Hono). Keep them separable: the UI may later be hosted on Vercel, but the bot/API never can.
+- Mac app: `electron/` (menu bar, window, Keychain keys); `npm run mac:typecheck`, `npm run mac:dev`, `npm run mac:dist` (→ `release/*.dmg`). `electron/menuModel.ts` holds the menu logic (tested without Electron). CI builds it on macOS and runs `--smoke-test` (`.github/workflows/mac-app.yml`); pushing a `v*` tag publishes a GitHub Release.
+- The recorder used by the app is `src/recording/SessionRecorder.ts` (driven by `src/bot/BotService.ts`); `src/spike/receive.ts` is the standalone M0 test version of the same logic.
 
 ## Rules
 

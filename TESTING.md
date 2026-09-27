@@ -7,6 +7,19 @@ and for Claude Code. Claude Code also reads [CLAUDE.md](CLAUDE.md) automatically
 Full setup details are in the [README](README.md#setup). This file covers the order to do things
 in, what to check, and what to send back.
 
+## Using the Mac app instead
+
+If you install **Session Bot.app** (README → *Install the Mac app*), you don't need any of the
+terminal steps below:
+
+- **Keys:** the app's welcome screen takes them.
+- **Recording test (2.3):** menu bar → **Join & Record ▸** your channel. Talk for 20 minutes, with someone leaving and rejoining, then **Stop Recording**.
+- **Checking it:** the session opens in the app, with its transcript (and summary) produced automatically.
+- **Audio:** for a listen-back check, the files are under `~/Library/Application Support/Session Bot/data/sessions/<session>/audio/`.
+
+The pass criteria in 2.3 are the same. If something fails, send the session's folder name and
+what you saw.
+
 ## 0. Start a Remote Control session on the Mac
 
 Remote Control runs Claude Code on your Mac, and you drive it from the Claude app. It has to be
