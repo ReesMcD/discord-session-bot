@@ -7,6 +7,19 @@ and for Claude Code. Claude Code also reads [CLAUDE.md](CLAUDE.md) automatically
 Full setup details are in the [README](README.md#setup). This file covers the order to do things
 in, what to check, and what to send back.
 
+## Using the Mac app instead
+
+If you install **Session Bot.app** (README → *Install the Mac app*), you don't need any of the
+terminal steps below:
+
+- **Keys:** the app's welcome screen takes them.
+- **Recording test (2.3):** menu bar → **Join & Record ▸** your channel. Talk for 20 minutes, with someone leaving and rejoining, then **Stop Recording**.
+- **Checking it:** the session opens in the app, with its transcript (and summary) produced automatically.
+- **Audio:** for a listen-back check, the files are under `~/Library/Application Support/Session Bot/data/sessions/<session>/audio/`.
+
+The pass criteria in 2.3 are the same. If something fails, send the session's folder name and
+what you saw.
+
 ## 0. Start a Remote Control session on the Mac
 
 Remote Control runs Claude Code on your Mac, and you drive it from the Claude app. It has to be
@@ -108,6 +121,20 @@ This is the go/no-go test: can the bot hear Discord's end-to-end encrypted voice
 - [ ] audio continues after the leave and rejoin (check the report around that time);
 - [ ] `Decrypt-failure debug lines` is small (a handful around the leave and rejoin is expected);
 - [ ] `transcript.md` reads correctly.
+
+### 2.4 The web app (optional, 10 min)
+
+```sh
+npm run web:build
+npm run app
+```
+
+Needs `APP_PASSWORD` in `.env`.
+
+- [ ] <http://localhost:4400> on the Mac: sign in, open a session, and read the transcript and summary.
+- [ ] Settings: change the summary detail level, then save. `config.yaml` has the new value, and its comments are still there.
+- [ ] On the phone, over Tailscale (README section F): the same pages work.
+- [ ] Press **Rebuild transcript** on a session. The log shows the job finishing.
 
 ## 3. What to send back
 

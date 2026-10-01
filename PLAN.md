@@ -43,6 +43,27 @@ account's lines from context (versioned prompt `prompts/disambiguate.v1.md`, cac
 The output is `transcript.speakers.md`, with `(?)` for guesses and `(unclear)` when it can't tell.
 Audio-based diarization is out of scope.
 
+## Web app (phone + Mac)
+
+**Architecture:** the bot, API and data stay on the Mac mini (or an always-on server). Vercel can't
+run the bot, which needs long-lived voice/UDP connections and local disk. The UI is a separate
+React/Vite SPA that calls the API (`VITE_API_URL`, `APP_CORS_ORIGINS`). For now it's served by the
+same process, and it can be moved to Vercel later. Phone access is over Tailscale. Password-protected.
+
+- **Round 1 (done):** `npm run app`. Sessions list; transcript, speaker-label and summary views;
+  run transcribe/merge/label/summarize with live logs (SSE); settings forms that edit `config.yaml`
+  while keeping its comments; prompt overrides; raw YAML.
+- **Round 2 (done, = M1):** always-on bot inside the app process: pick a guild/voice channel,
+  Join/Stop, live status (who's being recorded, elapsed time), reconnects, crash recovery,
+  channel announcements, auto transcribe/summarize after stop.
+- **Mac app (done):** Electron menu bar app (`electron/`) with Join & Record, Stop, recent
+  sessions, Open at Login, update notice, and the app window. Keys are stored in the Keychain,
+  ffmpeg is bundled. GitHub Actions builds the arm64 `.dmg` on macOS, smoke-tests it, and
+  publishes Releases on `v*` tags. Ad-hoc signed (no Apple Developer ID).
+- **Later:** live transcript during the call; Discord slash commands; Vercel-hosted UI; Discord
+  member picker (needs the Server Members intent); Developer ID signing and silent auto-update;
+  Intel build.
+
 ## Phase 3 — Publishing
 
 `Publisher` interface; `publish:` in config is a list of destinations. GitHub (single commit per session) first; Discord attachment becomes a publisher; others (Drive, Notion, webhook) pluggable. `ConfigSource` interface (local file | GitHub).
