@@ -27,3 +27,72 @@ README.md, **live-testing steps in TESTING.md**.
   transcription, merge and summary; keep it backwards compatible.
 - `@discordjs/voice` is pinned to 0.19.2 on purpose (DAVE receive fix). Don't upgrade it casually.
 - Before committing: `npm run typecheck && npm test`.
+
+## Core engineering rules
+
+These apply to every project regardless of language or stack. The project-specific sections above
+add to or override them.
+
+### Philosophy
+- Simplicity first. The best code is the code you didn't have to write.
+  Prefer the smallest change that cleanly solves the problem.
+- Follow Clean Code, Clean Architecture, and SOLID — as tools, not dogma.
+  Apply a principle when it reduces complexity, not to demonstrate it.
+- YAGNI wins ties. Build for extension only where change is likely or already
+  happening. No speculative abstractions, interfaces with one implementation,
+  or config for things nobody has asked to configure.
+- Rule of three: duplicate once if needed; abstract on the third occurrence.
+
+### Code Quality
+- Small, single-purpose functions and classes. If a name needs "and" in it,
+  split it.
+- Names should reveal intent. No abbreviations, no generic names
+  (data, manager, helper, utils) unless the scope makes the meaning obvious.
+- Depend on abstractions at architectural boundaries (data access, external
+  services, I/O) so core logic stays independent of frameworks and infra.
+  Inside a module, concrete code is fine.
+- Keep business/domain logic separate from transport, persistence, and UI.
+- Use established design patterns where they fit the problem naturally.
+  Don't force a pattern; name it in a comment only if it's non-obvious.
+- Fail loudly and early. Validate inputs at boundaries; no silent catches.
+- Comments explain *why*, not *what*. If code needs a comment to explain
+  what it does, rewrite the code first.
+- Match the existing style and conventions of the codebase over personal
+  preference.
+
+### Working in Existing Code
+- Leave code better than you found it, scoped to what you're touching.
+  Fix small violations (naming, dead code, obvious duplication) in the
+  files you're already modifying.
+- When you encounter older or unfamiliar code in your path, review it
+  against these rules before building on it.
+- For anything larger than a local cleanup — structural refactors,
+  cross-module changes, pattern changes — STOP and flag it with a short
+  summary of the issue and proposed fix. Do not refactor beyond the task
+  scope without approval.
+- Never mix refactoring and behavior changes in the same step. Refactor
+  under passing tests, then change behavior.
+
+### Testing
+- Test what matters, not everything. Prioritize:
+  1. Core business logic and domain rules
+  2. Integration points: database access, external APIs, service boundaries
+  3. Bug fixes — every fix gets a regression test reproducing the bug
+  4. Edge cases and failure paths on critical flows
+- Skip trivial tests: getters/setters, framework behavior, pass-through code.
+- Tests should verify behavior, not implementation. A refactor that
+  preserves behavior should not break tests.
+- Tests must be deterministic, isolated, and readable. A test is
+  documentation; name it after the behavior it verifies.
+- Mock at boundaries (network, DB, clock), not internal collaborators.
+- Run the relevant tests before declaring a task done. If they can't be
+  run, say so explicitly.
+
+### Process
+- Before non-trivial changes, briefly state the plan and which files will
+  be touched.
+- Ask when requirements are ambiguous rather than guessing.
+- Don't add dependencies without stating why an existing one or a few lines
+  of code won't do.
+- When done, summarize what changed, what was tested, and anything flagged
+  for follow-up.
