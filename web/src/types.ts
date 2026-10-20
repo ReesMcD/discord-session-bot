@@ -2,6 +2,7 @@
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type SharedSpeaker = { name?: string; disambiguate?: string[] };
+export type Campaign = { name?: string; context?: string; characters: Record<string, string> };
 
 export interface Config {
   recording: {
@@ -13,6 +14,7 @@ export interface Config {
     announce: boolean;
   };
   speakers: Record<string, string | SharedSpeaker>;
+  campaigns: Record<string, Campaign>;
   transcription: {
     provider: 'groq' | 'openai';
     model?: string;
@@ -34,6 +36,9 @@ export interface Config {
     include: string[];
     exclude: string[];
     context?: string;
+    cleanup: boolean;
+    cleanup_audit: boolean;
+    recap_audit: boolean;
     chunk_minutes: number;
     prompts_dir?: string;
   };
@@ -94,9 +99,15 @@ export interface SummaryMeta {
   requestedModel: string;
   modelsUsed: string[];
   items: number;
+  /** Missing in recaps written before the recap format. */
+  notes?: { npcs: number; locations: number; events: number; combats: number; items: number };
+  kills?: [string, number][];
   chunks: number;
   usage: Record<string, { inputTokens: number; outputTokens: number }>;
   speakerLabels?: { labelled: number; confident: number; guessed: number; unclear: number };
+  cleanup?: { edited: number; dropped: number; reverted?: number };
+  recapAudit?: { missing: number; applied: 'none' | 'revised' | 'appended' };
+  editedBackup?: string;
 }
 
 export interface SessionDetail extends SessionSummary {
@@ -105,6 +116,8 @@ export interface SessionDetail extends SessionSummary {
   speakerLines: TranscriptLine[] | null;
   summary: string | null;
   summaryMeta: SummaryMeta | null;
+  recapState: 'generated' | 'edited' | null;
+  editedAt: string | null;
   jobs: Job[];
 }
 
@@ -116,7 +129,7 @@ export interface Person {
 }
 
 export interface PromptInfo {
-  name: 'extract' | 'synthesize' | 'disambiguate';
+  name: 'disambiguate' | 'cleanup' | 'extract' | 'synthesize' | 'audit' | 'revise';
   placeholders: string[];
   builtIn: string;
   custom: string | null;

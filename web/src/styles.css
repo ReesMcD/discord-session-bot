@@ -131,3 +131,27 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 button.stop { width: 100%; margin-top: 16px; border-color: var(--bad); font-size: 1rem; min-height: 48px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+
+/* Recap editing */
+.recap-editor {
+  width: 100%;
+  min-height: 60vh;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.add-note {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.add-note select {
+  flex: 0 1 160px;
+}
+.add-note input {
+  flex: 1 1 200px;
+  min-width: 0;
+}

@@ -1,7 +1,7 @@
 # discord-session-bot — Plan
 
 Self-hosted Discord bot: `/record` → per-speaker recording → timestamped transcript.
-Later phases add AI summarization and pluggable publishing.
+Later phases add the AI session recap and pluggable publishing.
 
 ## Locked decisions (Phase 1)
 
@@ -28,17 +28,23 @@ reconnects, crash recovery) waits on M0.
 - **M2 Transcription.** `Transcriber` interface; per-speaker batching (ffmpeg concat + offset map) so short utterances aren't sent individually; word timestamps remapped to absolute time; hallucination / no-speech filtering.
 - **M3 Transcript.** Chronological merge → `[HH:MM:SS] Name: text` with alias mapping; post file to channel.
 
-## Phase 2 — AI summary
+## Phase 2 — AI session recap
 
-**Status:** built (`npm run summarize`), tested offline with a fake model; needs a live run.
+**Status:** built (`npm run summarize`, the **Write recap** button), tested offline with a fake model;
+needs a live run.
 
-Two-pass (chunked extract → synthesize) with Claude, include/exclude rules, detail level, cite_timestamps, versioned prompt templates, `/summarize <session>`. Model configurable.
+Pipeline: raw transcript → clean-up (#4) → clean-up audit (#9) → notes per chunk → recap → recap
+audit (#9) → edit by hand (#6). Each step is cached per chunk and the clean-up and audits can be
+turned off in the app. The recap is Markdown: **NPCs**, **Locations**, **What happened**,
+**Combat** with a kill count tallied in code (#7), then extra sections from `summary.include`.
+Campaigns (#8) map each voice channel to its playable characters so the recap can tell party
+members from NPCs. Versioned prompt templates, editable in the app. Model configurable.
 
 ### Shared-account speaker labelling
 
 **Status:** built (`npm run disambiguate`, and run automatically by `summarize`), tested offline; needs
 a live run. For a Discord account shared by several people (or one person in several roles),
-`speakers.<id>.disambiguate` lists the identities. Before the summary, Claude labels each of that
+`speakers.<id>.disambiguate` lists the identities. Before the recap, Claude labels each of that
 account's lines from context (versioned prompt `prompts/disambiguate.v1.md`, cached per chunk).
 The output is `transcript.speakers.md`, with `(?)` for guesses and `(unclear)` when it can't tell.
 Audio-based diarization is out of scope.
@@ -60,7 +66,7 @@ same process, and it can be moved to Vercel later. Phone access is over Tailscal
   sessions, Open at Login, update notice, and the app window. Keys are stored in the Keychain,
   ffmpeg is bundled. GitHub Actions builds the arm64 `.dmg` on macOS, smoke-tests it, and
   publishes Releases on `v*` tags. Ad-hoc signed (no Apple Developer ID).
-- **Later:** live transcript during the call; Discord slash commands; Vercel-hosted UI; Discord
+- **Later:** upload the recap to the wiki (#5, waiting on the endpoint); live transcript during the call; Discord slash commands; Vercel-hosted UI; Discord
   member picker (needs the Server Members intent); Developer ID signing and silent auto-update;
   Intel build.
 

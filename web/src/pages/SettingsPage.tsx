@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api, auth } from '../api';
-import type { Config, ConfigState, Effort, FieldError, Person, PromptInfo, SharedSpeaker } from '../types';
+import type { Campaign, Config, ConfigState, Effort, FieldError, GuildInfo, Person, PromptInfo, SharedSpeaker } from '../types';
 import { Badge, Field, ListEditor, NumberInput, Segmented, Toggle } from '../ui';
 
-type Section = 'keys' | 'people' | 'transcription' | 'summary' | 'prompts' | 'yaml';
+type Section = 'keys' | 'people' | 'campaigns' | 'transcription' | 'summary' | 'prompts' | 'yaml';
 const SECTIONS: { key: Section; label: string }[] = [
   ...(window.sessionBot ? [{ key: 'keys' as Section, label: 'Keys & phone' }] : []),
   { key: 'people', label: 'Recording & people' },
-  { key: 'summary', label: 'Summary' },
+  { key: 'campaigns', label: 'Campaigns' },
+  { key: 'summary', label: 'Recap' },
   { key: 'transcription', label: 'Transcription' },
   { key: 'prompts', label: 'Prompts' },
   { key: 'yaml', label: 'YAML' },
@@ -77,6 +78,7 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
 
       {section === 'keys' && <KeysSection />}
       {draft && section === 'people' && <PeopleSection config={draft} update={update} people={people} err={err} />}
+      {draft && section === 'campaigns' && <CampaignsSection config={draft} update={update} people={people} err={err} />}
       {draft && section === 'transcription' && <TranscriptionSection config={draft} update={update} err={err} />}
       {draft && section === 'summary' && <SummarySection config={draft} update={update} err={err} />}
       {section === 'prompts' && <PromptsSection />}
@@ -169,7 +171,7 @@ function PeopleSection({ config, update, err, people }: SectionProps & { people:
         <h2 style={{ marginTop: 0 }}>Speakers</h2>
         <p className="muted small">
           The name each person gets in transcripts. Turn on <strong>Shared account</strong> when several people talk through one Discord account (or one person plays
-          several roles), and list who. Claude will label each line before summarizing.
+          several roles), and list who. Claude will label each line before writing the recap.
         </p>
         {speakerIds.length === 0 && <p className="muted small">No names set: transcripts use Discord display names.</p>}
         {speakerIds.map((id) => {
@@ -215,7 +217,7 @@ function PeopleSection({ config, update, err, people }: SectionProps & { people:
             options={[
               { value: 'nothing', label: 'Do nothing' },
               { value: 'transcribe', label: 'Transcribe' },
-              { value: 'summarize', label: 'Transcribe + summarize' },
+              { value: 'summarize', label: 'Transcribe + recap' },
             ]}
             onChange={(v) => update((c) => void (c.recording.after_stop = v))}
           />
@@ -234,6 +236,98 @@ function PeopleSection({ config, update, err, people }: SectionProps & { people:
             <NumberInput value={config.recording.audio_retention_days} min={0} onChange={(v) => update((c) => void (c.recording.audio_retention_days = v))} />
           </Field>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CampaignsSection({ config, update, err, people }: SectionProps & { people: Person[] }) {
+  const [guilds, setGuilds] = useState<GuildInfo[]>([]);
+  const [manual, setManual] = useState('');
+  useEffect(() => {
+    api<GuildInfo[]>('/bot/guilds').then(setGuilds, () => {});
+  }, []);
+  const channels = guilds.flatMap((g) => g.channels.map((c) => ({ id: c.id, label: `#${c.name}${guilds.length > 1 ? ` (${g.name})` : ''}` })));
+  const ids = Object.keys(config.campaigns);
+  const add = (id: string) => update((c) => void (c.campaigns[id] = { characters: {} }));
+  // Rebuilt in a fixed key order so config.yaml reads name, context, characters.
+  const set = (id: string, f: (k: Campaign) => void) =>
+    update((c) => {
+      const k = c.campaigns[id]!;
+      f(k);
+      c.campaigns[id] = { ...(k.name ? { name: k.name } : {}), ...(k.context ? { context: k.context } : {}), characters: k.characters };
+    });
+
+  return (
+    <div>
+      <p className="muted small">
+        A campaign is tied to the voice channel you play in. Listing who plays which character lets the recap tell party members from NPCs and credit kills to
+        characters. Recordings imported from Craig use the campaign when there's only one.
+      </p>
+      {ids.map((id) => {
+        const k = config.campaigns[id]!;
+        const players = Object.keys(k.characters);
+        return (
+          <div className="card" key={id}>
+            <div className="row spread">
+              <strong>{channels.find((ch) => ch.id === id)?.label ?? 'Voice channel'}</strong>
+              <span className="row">
+                <span className="muted small">{id}</span>
+                <button className="link danger" onClick={() => update((c) => void delete c.campaigns[id])}>
+                  Remove
+                </button>
+              </span>
+            </div>
+            <div className="grid2">
+              <Field label="Campaign name" hint="Used as the recap's title." error={err(`campaigns.${id}.name`)}>
+                <input value={k.name ?? ''} placeholder="e.g. Curse of Strahd" onChange={(e) => set(id, (x) => void (x.name = e.target.value.trim() ? e.target.value : undefined))} />
+              </Field>
+            </div>
+            <Field label="Background" hint="Setting, party level, recurring names: anything Claude should know for this campaign." error={err(`campaigns.${id}.context`)}>
+              <textarea value={k.context ?? ''} placeholder="Gothic horror in Barovia. The party is level 5." onChange={(e) => set(id, (x) => void (x.context = e.target.value.trim() ? e.target.value : undefined))} />
+            </Field>
+            <Field label="Characters" hint='"Name — description", e.g. "Thorin — dwarf fighter". Use "DM" for the game master.' error={err(`campaigns.${id}.characters`)}>
+              <div className="list-editor">
+                {players.map((pid) => (
+                  <div className="list-row" key={pid}>
+                    <span style={{ flex: '0 1 160px' }} className="small">
+                      {personLabel(pid, people, config)}
+                    </span>
+                    <input value={k.characters[pid]} onChange={(e) => set(id, (x) => void (x.characters[pid] = e.target.value))} />
+                    <button type="button" className="icon danger" title="Remove" onClick={() => set(id, (x) => void delete x.characters[pid])}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Field>
+            <PersonPicker people={people} exclude={players} placeholder="Add a player…" onPick={(pid) => set(id, (x) => void (x.characters[pid] = 'Character — class'))} />
+          </div>
+        );
+      })}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Add a campaign</h2>
+        <div className="row" style={{ alignItems: 'stretch' }}>
+          {channels.some((c) => !ids.includes(c.id)) && (
+            <select value="" onChange={(e) => e.target.value && add(e.target.value)} style={{ flex: '1 1 200px' }}>
+              <option value="">Pick a voice channel…</option>
+              {channels
+                .filter((c) => !ids.includes(c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+            </select>
+          )}
+          <div className="row" style={{ flex: '1 1 240px', flexWrap: 'nowrap' }}>
+            <input value={manual} inputMode="numeric" placeholder="…or paste a voice channel ID" onChange={(e) => setManual(e.target.value.trim())} />
+            <button type="button" disabled={!ID_RE.test(manual) || ids.includes(manual)} onClick={() => (add(manual), setManual(''))}>
+              Add
+            </button>
+          </div>
+        </div>
+        {channels.length === 0 && <p className="muted small">Voice channels are listed here while the bot is running; otherwise paste the channel's ID (right-click → Copy Channel ID).</p>}
       </div>
     </div>
   );
@@ -304,10 +398,14 @@ function SummarySection({ config, update, err }: SectionProps) {
   return (
     <div>
       <div className="card">
-        <Field label="What these calls are" hint="Background for Claude: the game or meeting, who's who, recurring names." error={err('summary.context')}>
-          <textarea value={s.context ?? ''} placeholder="Weekly D&D campaign. Rees is the DM; Sam plays Thorin." onChange={(e) => set('context', e.target.value.trim() ? e.target.value : undefined)} />
+        <p className="muted small" style={{ marginTop: 0 }}>
+          The recap always has <strong>NPCs</strong>, <strong>Locations</strong>, <strong>What happened</strong> and <strong>Combat</strong> (with a kill count). The
+          extra sections below come after those. To change the format itself, edit the prompts.
+        </p>
+        <Field label="What these calls are" hint="Background for Claude for every campaign. Party members and per-campaign background go under Campaigns." error={err('summary.context')}>
+          <textarea value={s.context ?? ''} placeholder="Weekly D&D game. Rees is the DM." onChange={(e) => set('context', e.target.value.trim() ? e.target.value : undefined)} />
         </Field>
-        <Field label="Include" hint="What the summary captures. Each becomes a section, in this order." error={err('summary.include')}>
+        <Field label="Extra sections" hint="Each becomes a section after Combat, in this order." error={err('summary.include')}>
           <ListEditor items={s.include} onChange={(v) => set('include', v)} placeholder="e.g. Loot and rewards the party received" />
         </Field>
         <Field label="Exclude" hint="Left out even if it matches an include rule." error={err('summary.exclude')}>
@@ -327,6 +425,18 @@ function SummarySection({ config, update, err }: SectionProps) {
         <Toggle checked={s.cite_timestamps} onChange={(v) => set('cite_timestamps', v)} label="Cite timestamps" hint='Adds "[01:23:45]" after each point.' />
       </div>
       <div className="card">
+        <h2 style={{ marginTop: 0 }}>Steps</h2>
+        <p className="muted small">Raw transcript → clean-up → audit → recap → audit. Each Claude step costs another pass over the transcript.</p>
+        <Toggle checked={s.cleanup} onChange={(v) => set('cleanup', v)} label="Clean up the transcript" hint="Claude fixes misheard names and words and drops filler before the recap is written." />
+        <Toggle
+          checked={s.cleanup_audit}
+          onChange={(v) => set('cleanup_audit', v)}
+          label="Check the clean-up"
+          hint="Reverts any clean-up edit that rewrote a line instead of correcting it, and restores dropped lines that said something. Free: no API calls."
+        />
+        <Toggle checked={s.recap_audit} onChange={(v) => set('recap_audit', v)} label="Check the recap is complete" hint="Claude re-reads the transcript against the recap and adds anything it missed." />
+      </div>
+      <div className="card">
         <h2 style={{ marginTop: 0 }}>Model</h2>
         <Field label="Claude model" hint="claude-opus-5 (default) or claude-sonnet-5 (cheaper)." error={err('summary.model')}>
           <input value={s.model} list="models" onChange={(e) => set('model', e.target.value)} />
@@ -337,14 +447,14 @@ function SummarySection({ config, update, err }: SectionProps) {
           </datalist>
         </Field>
         <div className="grid2">
-          <Field label="Effort: reading chunks & labelling speakers">
+          <Field label="Effort: reading chunks (labels, clean-up, notes, checks)">
             <select value={s.extract_effort} onChange={(e) => set('extract_effort', e.target.value as Effort)}>
               {EFFORTS.map((x) => (
                 <option key={x}>{x}</option>
               ))}
             </select>
           </Field>
-          <Field label="Effort: writing the summary">
+          <Field label="Effort: writing the recap">
             <select value={s.synthesize_effort} onChange={(e) => set('synthesize_effort', e.target.value as Effort)}>
               {EFFORTS.map((x) => (
                 <option key={x}>{x}</option>
@@ -370,7 +480,14 @@ function PromptsSection() {
   }, []);
   if (!data) return <p className="muted">Loading…</p>;
 
-  const LABEL = { extract: 'Reading each chunk', synthesize: 'Writing the summary', disambiguate: 'Labelling shared-account speakers' };
+  const LABEL: Record<PromptInfo['name'], string> = {
+    disambiguate: 'Labelling shared-account speakers',
+    cleanup: 'Cleaning up the transcript',
+    extract: 'Taking notes from each chunk',
+    synthesize: 'Writing the recap (its format)',
+    audit: 'Checking the recap is complete',
+    revise: 'Adding what the check found',
+  };
   const act = async (name: string, method: 'PUT' | 'DELETE') => {
     try {
       const next = await api<{ dir: string | null; prompts: PromptInfo[] }>(`/prompts/${name}`, { method, ...(method === 'PUT' ? { json: { text: edits[name] } } : {}) });

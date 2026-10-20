@@ -122,6 +122,7 @@ test('kill count: tallied per character (matching party names), added to the Com
   assert.equal(insertKillCount('## What happened\n\n- Fight.\n\n## Loot\n\n- Gold', [['Thorin', 1]]), '## What happened\n\n- Fight.\n\n## Combat\n\n- **Kill count:** Thorin 1\n\n## Loot\n\n- Gold');
   assert.equal(insertKillCount('## Combat\n\n- x', [['Thorin', 1]]), '## Combat\n\n- x\n- **Kill count:** Thorin 1\n');
   assert.equal(insertKillCount(md, []), md);
+  assert.equal(insertKillCount('## Combat\n\n- x\n- **Kill count:** Elara 9\n', [['Thorin', 1]]), '## Combat\n\n- x\n- **Kill count:** Thorin 1\n', 'a model-written count is replaced');
 });
 
 test('clean-up audit: keeps corrections, reverts rewrites, restores real content, discards a chunk that changed too much', () => {

@@ -66,14 +66,16 @@ export function tallyKills(notes: readonly Extraction[], characters: readonly Pi
 
 /** The `##` section titled `title` (case-insensitive): [start of heading, end of section). */
 function findSection(md: string, title: string): [number, number] | undefined {
-  const heading = new RegExp(`^##\\s+${title}\\s*$`, 'im').exec(md);
+  const heading = new RegExp(`^##[ \\t]+${title}[ \\t]*$`, 'im').exec(md);
   if (!heading) return undefined;
   const next = /^##\s/m.exec(md.slice(heading.index + heading[0].length));
   return [heading.index, next ? heading.index + heading[0].length + next.index : md.length];
 }
 
 /** Adds "- **Kill count:** Thorin 2, Elara 1" at the end of the Combat section, creating it if needed. */
-export function insertKillCount(md: string, tally: readonly [string, number][]): string {
+export function insertKillCount(recap: string, tally: readonly [string, number][]): string {
+  // Only the computed count is trusted: drop any the model wrote despite being told not to.
+  const md = recap.replace(/^[-*]\s+\*\*Kill count:?\*\*.*(?:\n|$)/gim, '');
   if (!tally.length) return md;
   const bullet = `- **Kill count:** ${tally.map(([name, n]) => `${name} ${n}`).join(', ')}`;
   const combat = findSection(md, 'Combat');

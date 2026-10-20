@@ -14,7 +14,7 @@ terminal steps below:
 
 - **Keys:** the app's welcome screen takes them.
 - **Recording test (2.3):** menu bar → **Join & Record ▸** your channel. Talk for 20 minutes, with someone leaving and rejoining, then **Stop Recording**.
-- **Checking it:** the session opens in the app, with its transcript (and summary) produced automatically.
+- **Checking it:** the session opens in the app, with its transcript (and recap) produced automatically.
 - **Audio:** for a listen-back check, the files are under `~/Library/Application Support/Session Bot/data/sessions/<session>/audio/`.
 
 The pass criteria in 2.3 are the same. If something fails, send the session's folder name and
@@ -54,7 +54,8 @@ cp config.example.yaml config.yaml && open -e config.yaml
 In `config.yaml`, set at least:
 - `recording.ignore_users`: your music bot's user ID;
 - `speakers`: names for each person's ID;
-- `summary.context`: a line about what the calls are.
+- `summary.context`: a line about what the calls are;
+- `campaigns`: your voice channel's ID, with who plays which character (or set it up later in the app's **Settings → Campaigns**).
 
 (The README's [Discord bot](README.md#4-create-the-discord-bot-only-for-recording-with-the-bot) section shows how to get the IDs.)
 
@@ -77,7 +78,7 @@ npm test
 
 If `doctor` fails, fix what it says before going on.
 
-### 2.2 Transcription and summary with a Craig recording (optional, 10 min)
+### 2.2 Transcription and recap with a Craig recording (optional, 10 min)
 
 This checks Groq and Claude without the bot. Record a few minutes in Craig, download the **FLAC**
 multi-track zip, and put it on the Mac.
@@ -87,7 +88,8 @@ npm run import:craig -- ~/Downloads/craig-XXXX.zip --summarize
 ```
 
 - [ ] `data/sessions/craig-<id>/transcript.md` exists, with the right names, sensible text, and timestamps that match the call.
-- [ ] `summary.md` exists and follows your include/exclude rules.
+- [ ] `summary.md` (the recap) exists, with NPCs, Locations, What happened and Combat. Characters aren't listed as NPCs, and the kill count looks right.
+- [ ] `transcript.clean.md` fixed some misheard names without rewriting lines (`summary/audit/cleanup.json` lists anything the audit undid).
 
 ### 2.3 Voice-receive test with the bot (the main one, 20 min)
 
@@ -131,8 +133,8 @@ npm run app
 
 Needs `APP_PASSWORD` in `.env`.
 
-- [ ] <http://localhost:4400> on the Mac: sign in, open a session, and read the transcript and summary.
-- [ ] Settings: change the summary detail level, then save. `config.yaml` has the new value, and its comments are still there.
+- [ ] <http://localhost:4400> on the Mac: sign in, open a session, and read the transcript and recap. Try **Copy**, add a note to a section, and **Edit** → Save.
+- [ ] Settings: change the recap detail level, then save. `config.yaml` has the new value, and its comments are still there.
 - [ ] On the phone, over Tailscale (README section F): the same pages work.
 - [ ] Press **Rebuild transcript** on a session. The log shows the job finishing.
 

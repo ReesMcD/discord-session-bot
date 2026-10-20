@@ -12,6 +12,7 @@ import { generateDependencyReport } from '@discordjs/voice';
 import { BotService } from '../src/bot/BotService.js';
 import { startServer, type RunningServer } from '../src/app/startServer.js';
 import { listSessions } from '../src/app/sessions.js';
+import { PROMPT_NAMES } from '../src/app/promptStore.js';
 import { buildMenu, elapsed, type MenuAction, type MenuItem } from './menuModel.js';
 import { checkForUpdate } from './updates.js';
 import { applyToEnv, generatePassword, SecretStore, type Cipher } from './secrets.js';
@@ -243,7 +244,7 @@ async function smokeTest(): Promise<void> {
     results.dave = /@snazzah\/davey: \d/.test(report);
     results.aesGcm = /aes-256-gcm: yes/.test(report);
     results.prompts = (await (await fetch(`${server!.url}/api/prompts`, { headers: { Authorization: `Bearer ${secrets.password}` } })).json()) as unknown as object;
-    results.prompts = Array.isArray((results.prompts as { prompts?: unknown[] }).prompts) && (results.prompts as { prompts: unknown[] }).prompts.length === 3;
+    results.prompts = Array.isArray((results.prompts as { prompts?: unknown[] }).prompts) && (results.prompts as { prompts: unknown[] }).prompts.length === PROMPT_NAMES.length;
     results.tray = !!tray;
   } catch (err) {
     results.error = (err as Error).message;
