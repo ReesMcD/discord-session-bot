@@ -211,3 +211,31 @@ export interface GuildInfo {
   name: string;
   channels: VoiceChannelInfo[];
 }
+
+// --- Music ---------------------------------------------------------------------------------------
+
+/** A browser tab in the Mac app whose audio is played into the voice channel. */
+export interface MusicTab {
+  id: string;
+  title: string;
+  url: string;
+  /** 0–1. */
+  volume: number;
+  muted: boolean;
+  /** Making sound right now. */
+  audible: boolean;
+  /** The tab shown in the Music page's browser. */
+  active: boolean;
+}
+
+export interface MusicStatus {
+  /** Only the Mac app has the built-in browser; `npm run app` reports false. */
+  available: boolean;
+  /** The bot is in a voice channel, so the music is heard there. */
+  inChannel: boolean;
+  /** 0–1, applied to the whole mix. */
+  master: number;
+  /** Also play the mix on this Mac (capturing a tab silences it locally otherwise). */
+  monitor: boolean;
+  tabs: MusicTab[];
+}

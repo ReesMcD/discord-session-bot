@@ -13,6 +13,7 @@ import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
 import { PROVIDERS } from '../transcription/openaiCompatible.js';
 import type { BotService } from '../bot/BotService.js';
+import type { MusicControl } from '../music/control.js';
 
 export interface ServerOptions {
   /** Pass a function when the password can change while the server runs. */
@@ -28,6 +29,8 @@ export interface ServerOptions {
   allowLan?: boolean;
   /** The Discord bot, when it runs in this process. */
   bot?: BotService;
+  /** The Mac app's music browser. */
+  music?: MusicControl;
   log?: (msg: string) => void;
 }
 
@@ -70,6 +73,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       configStore,
       jobs,
       ...(opts.bot ? { bot: opts.bot } : {}),
+      ...(opts.music ? { music: opts.music } : {}),
       ...(opts.corsOrigins ? { corsOrigins: opts.corsOrigins } : {}),
       keys: () => {
         const provider = configStore.read().config?.transcription.provider ?? 'groq';

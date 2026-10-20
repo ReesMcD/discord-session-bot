@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateDependencyReport } from '@discordjs/voice';
 import { BotService } from '../src/bot/BotService.js';
+import { MusicBrowser } from './music/MusicBrowser.js';
 import { startServer, type RunningServer } from '../src/app/startServer.js';
 import { listSessions } from '../src/app/sessions.js';
 import { PROMPT_NAMES } from '../src/app/promptStore.js';
@@ -55,6 +56,9 @@ function missingKeys(): string[] {
 // --- State ------------------------------------------------------------------------------------
 let server: RunningServer | undefined;
 let bot: BotService;
+let music: MusicBrowser;
+/** Smoke test only: loudness of the captured music, to prove tab capture works on a real Mac. */
+const captured = { frames: 0, sumSquares: 0, samples: 0 };
 let tray: Tray | undefined;
 let win: BrowserWindow | undefined;
 let update: { version: string; url: string } | null = null;
@@ -219,6 +223,11 @@ function registerIpc(): void {
   ipcMain.handle('open-external', (_e, url: string) => (/^https?:\/\//.test(url) ? shell.openExternal(url) : undefined));
   ipcMain.handle('data-folder', () => userData);
   ipcMain.handle('reveal-data-folder', () => shell.openPath(userData));
+  ipcMain.on('music:view', (e, b: { x: number; y: number; width: number; height: number } | null) => {
+    if (!win || win.isDestroyed() || e.sender !== win.webContents) return;
+    const ok = b && [b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n) && n >= 0);
+    music.show(win, ok ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null);
+  });
 }
 
 async function quit(): Promise<void> {
@@ -227,12 +236,28 @@ async function quit(): Promise<void> {
     if (response !== 0) return;
   }
   quitting = true;
+  music?.close();
   await bot.shutdown();
   await server?.close();
   app.exit(0);
 }
 
 // --- Smoke test (CI on a real Mac): everything starts and the pieces work -----------------------
+/** Smoke test: running loudness of the captured mix (16-bit stereo samples). */
+function measure(pcm: Buffer): void {
+  captured.frames++;
+  for (let i = 0; i + 1 < pcm.length; i += 2) {
+    const v = pcm.readInt16LE(i);
+    captured.sumSquares += v * v;
+    captured.samples++;
+  }
+}
+
+/** A page that plays a steady tone, for the smoke test's music capture check. */
+const TONE_PAGE = `data:text/html,${encodeURIComponent(
+  '<title>tone</title><script>const c=new AudioContext();const o=c.createOscillator();const g=c.createGain();g.gain.value=0.3;o.frequency.value=440;o.connect(g).connect(c.destination);o.start();c.resume();</script>',
+)}`;
+
 async function smokeTest(): Promise<void> {
   const results: Record<string, unknown> = {};
   try {
@@ -248,11 +273,20 @@ async function smokeTest(): Promise<void> {
     results.prompts = (await (await fetch(`${server!.url}/api/prompts`, { headers: { Authorization: `Bearer ${secrets.password}` } })).json()) as unknown as object;
     results.prompts = Array.isArray((results.prompts as { prompts?: unknown[] }).prompts) && (results.prompts as { prompts: unknown[] }).prompts.length === PROMPT_NAMES.length;
     results.tray = !!tray;
+    // Music: a tab playing a tone is captured, mixed and turned into PCM frames for the bot.
+    const tab = music.openTab(TONE_PAGE);
+    await new Promise((r) => setTimeout(r, 4000));
+    music.closeTab(tab);
+    const rms = captured.samples ? Math.sqrt(captured.sumSquares / captured.samples) : 0;
+    results.musicFrames = captured.frames;
+    results.musicRms = Math.round(rms);
+    results.music = captured.frames >= 50 && rms > 1000;
   } catch (err) {
     results.error = (err as Error).message;
   }
-  const ok = results.api === 200 && results.webUi && results.ffmpeg && results.dave && results.aesGcm && results.prompts && results.tray && !results.error;
+  const ok = results.api === 200 && results.webUi && results.ffmpeg && results.dave && results.aesGcm && results.prompts && results.tray && results.music && !results.error;
   console.log(`SMOKE ${ok ? 'PASS' : 'FAIL'} ${JSON.stringify(results)}`);
+  music.close();
   await bot.shutdown();
   await server?.close();
   app.exit(ok ? 0 : 1);
@@ -276,8 +310,24 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
     registerIpc();
 
     bot = new BotService({ dataDir, configPath, log });
+    music = new MusicBrowser({
+      capturePage: join(app.getAppPath(), 'dist-electron', 'capture.html'),
+      capturePreload: join(app.getAppPath(), 'dist-electron', 'capture.cjs'),
+      onPcm: (pcm) => {
+        if (SMOKE) measure(pcm);
+        try {
+          bot.music.write(pcm);
+        } catch (err) {
+          log(`music: ${(err as Error).message}`);
+        }
+      },
+      onSilence: () => bot.music.stop(),
+      inChannel: () => !!bot.status().recording,
+      log,
+    });
+    await music.start();
     try {
-      server = await startServer({ password: () => secrets.password, port: PORT, host: '0.0.0.0', dataDir, configPath, webDist, bot, log });
+      server = await startServer({ password: () => secrets.password, port: PORT, host: '0.0.0.0', dataDir, configPath, webDist, bot, music, log });
     } catch (err) {
       const busy = (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
       await dialog.showMessageBox({
@@ -295,6 +345,10 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
     let pending: NodeJS.Timeout | undefined;
     const soon = () => (pending ??= setTimeout(() => ((pending = undefined), refreshTray()), 1000));
     bot.on('status', soon);
+    let wasInChannel = false;
+    bot.on('status', (s) => {
+      if (!!s.recording !== wasInChannel) ((wasInChannel = !!s.recording), music.changed());
+    });
     server.jobs.on('job', (j) => (j.status === 'done' || j.status === 'failed' ? soon() : undefined));
     setInterval(refreshTitle, 1000).unref();
     setInterval(() => bot.status().recording && refreshTray(), 15_000).unref(); // keep the dropdown's timer fresh

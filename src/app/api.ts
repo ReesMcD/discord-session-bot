@@ -11,6 +11,7 @@ import type { PromptName } from '../summary/prompts.js';
 import { saveRecapEdit } from '../summary/recapEdits.js';
 import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
+import { normalizeUrl, type MusicControl, type MusicStatus } from '../music/control.js';
 
 export interface ApiOptions {
   password: PasswordSource;
@@ -23,6 +24,8 @@ export interface ApiOptions {
   keys?: () => Record<string, boolean>;
   /** The Discord bot, when running in this process. */
   bot?: BotControl;
+  /** The Mac app's music browser; absent under `npm run app`. */
+  music?: MusicControl;
   /** Throttles wrong passwords (tests pass their own clock). */
   signInLimiter?: SignInLimiter;
 }
@@ -32,7 +35,7 @@ const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize'];
 export function createApi(opts: ApiOptions): Hono {
   const api = new Hono();
   if (opts.corsOrigins?.length) {
-    api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
+    api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
   }
   api.use('*', requirePassword(opts.password, opts.signInLimiter));
 
@@ -122,14 +125,17 @@ export function createApi(opts: ApiOptions): Hono {
     streamSSE(c, async (stream) => {
       const send = (job: Job) => void stream.writeSSE({ event: 'job', data: JSON.stringify(job) });
       const sendBot = (status: BotStatus) => void stream.writeSSE({ event: 'bot', data: JSON.stringify(status) });
+      const sendMusic = (status: MusicStatus) => void stream.writeSSE({ event: 'music', data: JSON.stringify(status) });
       opts.jobs.on('job', send);
       opts.bot?.on('status', sendBot);
+      opts.music?.on('status', sendMusic);
       if (opts.bot) sendBot(opts.bot.status());
       const ping = setInterval(() => void stream.writeSSE({ event: 'ping', data: '' }), 25_000);
       await new Promise<void>((resolve) => stream.onAbort(resolve));
       clearInterval(ping);
       opts.jobs.off('job', send);
       opts.bot?.off('status', sendBot);
+      opts.music?.off('status', sendMusic);
     }),
   );
 
@@ -154,6 +160,46 @@ export function createApi(opts: ApiOptions): Hono {
     } catch (err) {
       return c.json({ error: (err as Error).message }, 409);
     }
+  });
+
+  // --- Music (the Mac app's built-in browser) -----------------------------------------------------
+  const noMusic: MusicStatus = { available: false, inChannel: false, master: 1, monitor: true, tabs: [] };
+  const unit = (v: unknown) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : undefined);
+  api.get('/music', (c) => c.json(opts.music?.status() ?? noMusic));
+  api.post('/music/tabs', async (c) => {
+    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
+    const { url } = (await c.req.json().catch(() => ({}))) as { url?: unknown };
+    try {
+      opts.music.openTab(normalizeUrl(typeof url === 'string' ? url : ''));
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+    return c.json(opts.music.status());
+  });
+  api.patch('/music/tabs/:id', async (c) => {
+    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
+    const id = c.req.param('id');
+    if (!opts.music.status().tabs.some((t) => t.id === id)) return c.json({ error: 'not found' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { volume?: unknown; muted?: unknown; active?: unknown };
+    if (body.volume !== undefined && unit(body.volume) === undefined) return c.json({ error: 'volume must be between 0 and 1' }, 400);
+    opts.music.updateTab(id, {
+      ...(body.volume !== undefined ? { volume: body.volume as number } : {}),
+      ...(typeof body.muted === 'boolean' ? { muted: body.muted } : {}),
+      ...(body.active === true ? { active: true } : {}),
+    });
+    return c.json(opts.music.status());
+  });
+  api.delete('/music/tabs/:id', (c) => {
+    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
+    opts.music.closeTab(c.req.param('id'));
+    return c.json(opts.music.status());
+  });
+  api.patch('/music', async (c) => {
+    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
+    const body = (await c.req.json().catch(() => ({}))) as { master?: unknown; monitor?: unknown };
+    if (body.master !== undefined && unit(body.master) === undefined) return c.json({ error: 'master must be between 0 and 1' }, 400);
+    opts.music.update({ ...(body.master !== undefined ? { master: body.master as number } : {}), ...(typeof body.monitor === 'boolean' ? { monitor: body.monitor } : {}) });
+    return c.json(opts.music.status());
   });
 
   // --- Config -----------------------------------------------------------------------------------

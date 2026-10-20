@@ -10,6 +10,8 @@ export type {
   GuildInfo,
   Job,
   JobStep,
+  MusicStatus,
+  MusicTab,
   Person,
   PromptInfo,
   RecordingStatus,
@@ -36,6 +38,8 @@ export interface DesktopBridge {
   openExternal(url: string): Promise<void>;
   dataFolder(): Promise<string>;
   revealDataFolder(): Promise<void>;
+  /** Shows the active music tab over this area of the window, or hides it (null). */
+  showMusicTab(bounds: { x: number; y: number; width: number; height: number } | null): void;
 }
 
 declare global {
