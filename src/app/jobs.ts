@@ -1,23 +1,9 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 
-export type JobStep = 'transcribe' | 'merge' | 'disambiguate' | 'summarize';
-export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
+import type { Job, JobStep } from '../shared/types.js';
 
-export interface Job {
-  id: string;
-  sessionId: string;
-  step: JobStep;
-  force: boolean;
-  status: JobStatus;
-  createdAt: number;
-  startedAt?: number;
-  finishedAt?: number;
-  logs: string[];
-  error?: string;
-  /** Runs only if this earlier job succeeded (e.g. the recap after transcription). */
-  after?: string;
-}
+export type { Job, JobStatus, JobStep } from '../shared/types.js';
 
 export type StepRunner = (job: Job, log: (msg: string) => void) => Promise<void>;
 

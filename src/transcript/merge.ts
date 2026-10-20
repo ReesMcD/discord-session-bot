@@ -4,21 +4,9 @@ import { sharedAccounts, speakerNames, type Config } from '../config/schema.js';
 import { paths, readJson, readParticipants, readSessionInfo, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { SpeakerTranscript } from '../transcription/transcribeSession.js';
 import type { SpeakerSegment } from '../transcription/remap.js';
+import type { TranscriptLine } from '../shared/types.js';
 
-export interface TranscriptLine {
-  userId: string;
-  speaker: string;
-  /** Milliseconds from session start. */
-  offsetMs: number;
-  startMs: number;
-  endMs: number;
-  text: string;
-  /**
-   * Set when the speaker was inferred by the disambiguation pass for a shared account:
-   * `account` is the account's own name, `confidence` how sure Claude was.
-   */
-  inferred?: { account: string; confidence: 'high' | 'low' | 'unclear' };
-}
+export type { TranscriptLine };
 
 /** Transcript name for a user: config alias → Discord display name at recording time → raw ID. */
 export function speakerName(userId: string, aliases: Record<string, string>, participants: Record<string, Participant>): string {

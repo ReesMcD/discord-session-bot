@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { Participant, SessionInfo } from '../shared/types.js';
 
 /**
  * The on-disk session folder is the contract between phases (recording → transcription →
@@ -24,22 +25,7 @@ export const paths = {
   cleanTranscript: (dir: string) => join(dir, 'transcript.clean.md'),
 };
 
-export interface SessionInfo {
-  id: string;
-  startedAt: number;
-  stoppedAt?: number;
-  guildId?: string;
-  guildName?: string;
-  channelId?: string;
-  channelName?: string;
-  /** Set when the audio was deleted under recording.audio_retention_days (the text is kept). */
-  audioDeletedAt?: number;
-}
-
-export interface Participant {
-  displayName: string;
-  username?: string;
-}
+export type { Participant, SessionInfo } from '../shared/types.js';
 
 export interface UtteranceFile {
   userId: string;

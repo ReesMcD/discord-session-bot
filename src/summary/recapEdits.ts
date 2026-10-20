@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { readJson, writeJson } from '../session/layout.js';
+import type { RecapState } from '../shared/types.js';
 
 export const recapPaths = {
   markdown: (s: string) => join(s, 'summary.md'),
@@ -14,7 +15,7 @@ export interface EditState {
   editedAt: string;
 }
 
-export type RecapState = 'generated' | 'edited';
+export type { RecapState };
 
 export function recapState(sessionDir: string): RecapState | null {
   if (!existsSync(recapPaths.markdown(sessionDir))) return null;

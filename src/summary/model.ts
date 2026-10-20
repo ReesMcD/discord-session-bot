@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
+import type { Usage } from '../shared/types.js';
 
 const time = z.string().describe('Timestamp copied from the transcript, HH:MM:SS');
 
@@ -68,10 +69,7 @@ export const labelSchema = z.object({
 export type Labels = z.infer<typeof labelSchema>;
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
-export interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-}
+export type { Usage };
 
 export interface CallResult<T> {
   value: T;

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { PromptName } from '../shared/types.js';
 
 /** Bump a template's version when it changes meaningfully; recorded in each recap's metadata. */
 export const PROMPT_VERSIONS = {
@@ -11,12 +12,12 @@ export const PROMPT_VERSIONS = {
   audit: 'v1',
   revise: 'v1',
   disambiguate: 'v1',
-} as const;
+} as const satisfies Record<PromptName, string>;
 
 /** Built-in templates ship in prompts/; a packaged app points PROMPTS_BUILTIN_DIR at its bundled copy. */
 const builtInDir = () => process.env.PROMPTS_BUILTIN_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'prompts');
 
-export type PromptName = keyof typeof PROMPT_VERSIONS;
+export type { PromptName };
 
 export interface Template {
   name: PromptName;

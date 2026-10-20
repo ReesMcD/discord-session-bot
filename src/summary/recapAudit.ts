@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { Config } from '../config/schema.js';
-import type { TranscriptLine } from '../transcript/merge.js';
+import type { RecapAuditApplied, TranscriptLine } from '../shared/types.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import type { AuditFindings, SummaryModel, Usage } from './model.js';
@@ -13,7 +13,7 @@ export interface RecapAuditResult {
   /** What the audit found missing (after removing duplicates). */
   missing: Finding[];
   /** How the findings were added: by Claude's revision, appended as a section, or not at all. */
-  applied: 'none' | 'revised' | 'appended';
+  applied: RecapAuditApplied;
   modelsUsed: string[];
   usage: { audit: Usage; revise: Usage };
   promptVersions: { audit: string; revise: string };

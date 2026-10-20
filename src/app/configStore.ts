@@ -4,19 +4,9 @@ import { Document, isMap, isScalar, parseDocument, YAMLMap } from 'yaml';
 import { z } from 'zod';
 import { configSchema, explainKeyErrors, type Config } from '../config/schema.js';
 import { ConfigError, parseConfig } from '../config/load.js';
+import type { ConfigState, FieldError } from '../shared/types.js';
 
-export interface ConfigState {
-  path: string;
-  exists: boolean;
-  yaml: string;
-  config: Config | null;
-  error: string | null;
-}
-
-export interface FieldError {
-  path: string;
-  message: string;
-}
+export type { ConfigState, FieldError } from '../shared/types.js';
 
 export class ConfigStore {
   readonly path: string;

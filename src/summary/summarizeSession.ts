@@ -15,6 +15,9 @@ import { loadTemplate, render } from './prompts.js';
 import { countNotes, formatNotes, insertKillCount, tallyKills } from './recap.js';
 import { auditRecap, type RecapAuditResult } from './recapAudit.js';
 import { recapPaths, writeGeneratedRecap } from './recapEdits.js';
+import type { SummaryMeta } from '../shared/types.js';
+
+export type { SummaryMeta };
 
 export const summaryPaths = {
   dir: (s: string) => join(s, 'summary'),
@@ -51,31 +54,9 @@ export interface SummarizeOptions {
   force?: boolean;
 }
 
-export interface SummaryMeta {
-  generatedAt: string;
-  requestedModel: string;
-  modelsUsed: string[];
-  promptVersions: Record<string, string>;
-  configHash: string;
-  detail: string;
-  chunks: number;
-  chunksFromCache: number;
-  /** Total notes extracted, all kinds. */
-  items: number;
-  notes: ReturnType<typeof countNotes>;
-  kills: [string, number][];
-  usage: { extract: Usage; synthesize: Usage; disambiguate?: Usage; cleanup?: Usage; audit?: Usage; revise?: Usage };
-  /** Present when shared accounts were relabelled before the recap. */
-  speakerLabels?: { labelled: number; confident: number; guessed: number; unclear: number };
-  cleanup?: { edited: number; dropped: number; reverted?: number };
-  recapAudit?: { missing: number; applied: RecapAuditResult['applied'] };
-  /** Where a hand-edited recap was moved before this one replaced it. */
-  editedBackup?: string;
-}
-
 /** One line on what a recap run did and cost, for the CLI and the app's job log. */
 export function describeRun(meta: SummaryMeta): string {
-  const n = meta.notes;
+  const n = meta.notes ?? { npcs: 0, locations: 0, events: 0, combats: 0, items: 0 };
   const tokens = Object.entries(meta.usage)
     .filter(([, u]) => u && (u.inputTokens || u.outputTokens))
     .map(([step, u]) => `${step} ${u!.inputTokens}/${u!.outputTokens}`)
