@@ -6,6 +6,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { createApi } from './api.js';
 import type { PasswordSource } from './auth.js';
+import { networkGuard } from './network.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
@@ -22,6 +23,8 @@ export interface ServerOptions {
   /** Folder with the built web UI (index.html). */
   webDist: string;
   corsOrigins?: string[];
+  /** Answer devices on the local network too, not just this Mac and Tailscale. */
+  allowLan?: boolean;
   /** The Discord bot, when it runs in this process. */
   bot?: BotService;
   log?: (msg: string) => void;
@@ -46,6 +49,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   opts.bot?.attachJobs(jobs, configStore);
 
   const app = new Hono();
+  app.use('*', networkGuard(opts.allowLan ?? false));
   app.route(
     '/api',
     createApi({

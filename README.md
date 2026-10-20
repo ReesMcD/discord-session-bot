@@ -372,8 +372,10 @@ What's in it:
   Saving keeps the comments in `config.yaml`.
 - **Record**: pick a voice channel and **Join & record**, with a live view of who's being recorded, and **Stop**.
 
-**Security:** the app controls a bot that records people, so it always needs the password, and
-it's only reachable on your Mac and your Tailscale devices. Don't expose port 4400 to the internet.
+**Security:** the app controls a bot that records people, so it always needs the password, and it
+only answers this Mac and your Tailscale devices. Other devices on your Wi-Fi get "forbidden" (set
+`APP_ALLOW_LAN=1` in `.env` if you want them in). After 10 wrong passwords in a minute, that device
+has to wait a minute. Don't expose port 4400 to the internet.
 
 **Later on Vercel:** the pages can be hosted on Vercel, but the bot can't. It needs a
 long-running voice connection and local disk, which Vercel doesn't offer, so the bot and API

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
-import { requirePassword, type PasswordSource } from './auth.js';
+import { requirePassword, SignInLimiter, type PasswordSource } from './auth.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner, type Job, type JobStep } from './jobs.js';
 import { DEFAULT_PROMPTS_DIR, PROMPT_NAMES, checkTemplate, deletePrompt, readPrompts, writePrompt } from './promptStore.js';
@@ -22,6 +22,8 @@ export interface ApiOptions {
   keys?: () => Record<string, boolean>;
   /** The Discord bot, when running in this process. */
   bot?: BotControl;
+  /** Throttles wrong passwords (tests pass their own clock). */
+  signInLimiter?: SignInLimiter;
 }
 
 const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize'];
@@ -31,7 +33,7 @@ export function createApi(opts: ApiOptions): Hono {
   if (opts.corsOrigins?.length) {
     api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'DELETE'] }));
   }
-  api.use('*', requirePassword(opts.password));
+  api.use('*', requirePassword(opts.password, opts.signInLimiter));
 
   api.get('/health', (c) => c.json({ ok: true, keys: opts.keys?.() ?? {} }));
 

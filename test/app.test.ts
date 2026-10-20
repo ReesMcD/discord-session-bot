@@ -4,6 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApi } from '../src/app/api.js';
+import { SignInLimiter } from '../src/app/auth.js';
+import { isLocalOrTailscale } from '../src/app/network.js';
+import { startServer } from '../src/app/startServer.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner } from '../src/app/jobs.js';
 import { pipelineRunner } from '../src/app/steps.js';
@@ -54,6 +57,34 @@ test('a changed password applies at once: the old one stops working, the new one
   current = 'second password 2';
   assert.equal(await health('first password 1'), 401);
   assert.equal(await health('second password 2'), 200);
+});
+
+test('wrong passwords are throttled per client; a right one still works afterwards', async () => {
+  let now = 0;
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const api = createApi({ password: PASSWORD, dataDir: root, configStore: new ConfigStore(join(root, 'c.yaml')), jobs: new JobRunner(async () => {}), signInLimiter: new SignInLimiter(3, 60_000, () => now) });
+  const status = async (p: string) => (await api.request('/health', { headers: { Authorization: `Bearer ${p}` } })).status;
+  for (let i = 0; i < 3; i++) assert.equal(await status('guess'), 401);
+  const blocked = await api.request('/health', { headers: { Authorization: `Bearer ${PASSWORD}` } });
+  assert.equal(blocked.status, 429, 'even the right password waits while blocked');
+  assert.equal(blocked.headers.get('Retry-After'), '60');
+  now += 60_001;
+  assert.equal(await status(PASSWORD), 200);
+  assert.equal(await status('guess'), 401, 'a success clears the count');
+});
+
+test('only this Mac and Tailscale addresses are let in by default', async () => {
+  for (const a of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '100.64.0.1', '100.101.102.103', '100.127.255.255', 'fd7a:115c:a1e0::1']) assert.ok(isLocalOrTailscale(a), a);
+  for (const a of ['192.168.1.20', '10.0.0.5', '::ffff:192.168.1.20', '100.63.0.1', '100.128.0.1', 'fe80::1', '2001:db8::1']) assert.ok(!isLocalOrTailscale(a), a);
+
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const server = await startServer({ password: PASSWORD, port: 0, host: '127.0.0.1', dataDir: root, configPath: join(root, 'c.yaml'), webDist: join(root, 'none'), log: () => {} });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/health`, { headers: { Authorization: `Bearer ${PASSWORD}` } });
+    assert.equal(res.status, 200, 'loopback is allowed through the real server');
+  } finally {
+    await server.close();
+  }
 });
 
 test('lists sessions and rejects path tricks', async () => {
