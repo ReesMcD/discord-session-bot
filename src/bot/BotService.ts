@@ -5,6 +5,7 @@ import { ChannelType, Client, Events, GatewayIntentBits, type VoiceBasedChannel 
 import { loadConfig } from '../config/load.js';
 import { listUtterances, paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { SessionRecorder } from '../recording/SessionRecorder.js';
+import { MusicBroadcast } from '../music/broadcast.js';
 import type { ConfigStore } from '../app/configStore.js';
 import type { JobRunner } from '../app/jobs.js';
 import type { BotControl, BotStatus, GuildInfo, RecordingStatus } from './types.js';
@@ -53,6 +54,8 @@ export function recoverInterrupted(dataDir: string): string[] {
  * time. Status changes are emitted as "status" events for the API, web UI and menu bar.
  */
 export class BotService extends EventEmitter implements BotControl {
+  /** Music mixed by the Mac app, played into whichever channel the bot is recording. */
+  readonly music = new MusicBroadcast();
   private client: Client | undefined;
   private state: BotStatus['state'] = 'off';
   private error: string | undefined;
@@ -145,6 +148,7 @@ export class BotService extends EventEmitter implements BotControl {
       channel,
       filter: { ignoreUserIds: new Set(config.recording.ignore_users), ignoreBots: config.recording.ignore_bots, selfId: this.client.user!.id },
       silenceMs: config.recording.silence_ms,
+      selfMute: false,
       log: this.log,
     });
     this.recorder = recorder;
@@ -157,6 +161,7 @@ export class BotService extends EventEmitter implements BotControl {
       this.emitStatus(true);
       throw err;
     }
+    recorder.play(this.music.player);
     if (config.recording.announce) {
       await channel.send('🔴 **Recording started.** This call is being recorded and transcribed.').catch(() => this.log('could not post the start notice (needs Send Messages)'));
     }
