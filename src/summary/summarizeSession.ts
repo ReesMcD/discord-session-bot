@@ -1,12 +1,11 @@
-import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sharedAccounts, type Config } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
-import { mapLimit } from '../util/retry.js';
 import { campaignFor } from './campaign.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
+import { runChunkPass } from './chunkPass.js';
 import { cleanTranscript, type CleanupResult } from './cleanup.js';
 import type { CleanupAuditReport } from './cleanupAudit.js';
 import { contextBlock } from './context.js';
@@ -26,13 +25,6 @@ export const summaryPaths = {
   markdown: recapPaths.markdown,
 };
 
-interface ExtractionCache {
-  key: string;
-  model: string;
-  notes: Extraction;
-  usage: Usage;
-}
-
 const DETAIL_GUIDANCE: Record<Config['summary']['detail'], string> = {
   low: 'Keep it short: only what matters most, one line per bullet, at most five bullets per section. Someone should be able to read it in under a minute.',
   medium: 'Cover every meaningful point, concisely: a bullet per distinct point, a sentence or two each. Merge minor related points. Aim for something readable in a few minutes.',
@@ -45,12 +37,6 @@ function numbered(rules: readonly string[]): string {
 
 function bullets(rules: readonly string[], none: string): string {
   return rules.length ? rules.map((r) => `- ${r}`).join('\n') : none;
-}
-
-function hash(...parts: string[]): string {
-  const h = createHash('sha256');
-  for (const p of parts) h.update(p).update('\0');
-  return h.digest('hex');
 }
 
 const add = (a: Usage, b: Usage) => {
@@ -159,27 +145,28 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
 
   const chunks = chunkTranscript(lines, { chunkMs: s.chunk_minutes * 60_000, contextMs: 60_000, maxChars: 60_000 });
   log(`Extracting from ${chunks.length} chunk(s) with ${s.model}…`);
-  let fromCache = 0;
-  const extractUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-  const notes = await mapLimit(chunks, opts.concurrency ?? 3, async (chunk): Promise<Extraction> => {
-    const user = formatChunk(chunk, chunks.length);
-    const key = hash(s.model, s.extract_effort, extractSystem, user);
-    const cacheFile = summaryPaths.extraction(sessionDir, chunk.index);
-    const cached = opts.force ? undefined : readJson<ExtractionCache>(cacheFile);
-    if (cached?.key === key && cached.notes) {
-      fromCache++;
-      used.add(cached.model);
-      return cached.notes;
-    }
-    const r = await model.extract({ model: s.model, effort: s.extract_effort, system: extractSystem, user });
-    const n: Extraction = { ...r.value, items: r.value.items.filter((it) => it.rule >= 1 && it.rule <= s.include.length && it.detail.trim()) };
-    writeJson(cacheFile, { key, model: r.model, notes: n, usage: r.usage } satisfies ExtractionCache);
-    used.add(r.model);
-    add(extractUsage, r.usage);
-    const c = countNotes([n]);
-    log(`  chunk ${chunk.index + 1}/${chunks.length} (${formatOffset(chunk.startMs)}–${formatOffset(chunk.endMs)}): ${c.npcs} NPCs, ${c.locations} locations, ${c.events} events, ${c.combats} fights`);
-    return n;
+  const extraction = await runChunkPass({
+    chunks,
+    model: s.model,
+    effort: s.extract_effort,
+    system: extractSystem,
+    user: (chunk) => formatChunk(chunk, chunks.length),
+    cacheFile: (chunk) => summaryPaths.extraction(sessionDir, chunk.index),
+    call: async (o) => {
+      const r = await model.extract(o);
+      // Items for a rule that doesn't exist are dropped before they're cached.
+      return { ...r, value: { ...r.value, items: r.value.items.filter((it) => it.rule >= 1 && it.rule <= s.include.length && it.detail.trim()) } };
+    },
+    onAnswer: (chunk, n) => {
+      const c = countNotes([n]);
+      log(`  chunk ${chunk.index + 1}/${chunks.length} (${formatOffset(chunk.startMs)}–${formatOffset(chunk.endMs)}): ${c.npcs} NPCs, ${c.locations} locations, ${c.events} events, ${c.combats} fights`);
+    },
+    ...(opts.force ? { force: true } : {}),
+    ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
   });
+  const notes: Extraction[] = extraction.values;
+  for (const m of extraction.modelsUsed) used.add(m);
+  const extractUsage = extraction.usage;
   const counts = countNotes(notes);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
@@ -249,7 +236,7 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
     configHash,
     detail: s.detail,
     chunks: chunks.length,
-    chunksFromCache: fromCache,
+    chunksFromCache: extraction.fromCache,
     items: total,
     notes: counts,
     kills,

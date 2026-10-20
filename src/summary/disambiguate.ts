@@ -1,11 +1,10 @@
-import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sharedAccounts, type Config, type Identity } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, joinLines, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
-import { mapLimit } from '../util/retry.js';
 import { chunkTranscript, formatLine, type Chunk } from './chunk.js';
+import { runChunkPass } from './chunkPass.js';
 import { contextBlock } from './context.js';
 import type { Labels, SummaryModel, Usage } from './model.js';
 import { loadTemplate, render } from './prompts.js';
@@ -14,13 +13,6 @@ import { loadTemplate, render } from './prompts.js';
 interface NumberedIdentity extends Identity {
   number: number;
   userId: string;
-}
-
-interface LabelCache {
-  key: string;
-  model: string;
-  labels: Labels['labels'];
-  usage: Usage;
 }
 
 export interface DisambiguationResult {
@@ -38,12 +30,6 @@ export interface DisambiguateOptions {
   concurrency?: number;
   force?: boolean;
   log?: (msg: string) => void;
-}
-
-function hash(...parts: string[]): string {
-  const h = createHash('sha256');
-  for (const p of parts) h.update(p).update('\0');
-  return h.digest('hex');
 }
 
 function accountsBlock(accounts: ReadonlyMap<string, NumberedIdentity[]>, names: ReadonlyMap<string, string>): string {
@@ -113,29 +99,20 @@ export async function disambiguateLines(
   const chunks = allChunks.filter((c) => c.lines.some((l) => targets.has(l.userId)));
   log(`Labelling speakers on ${accounts.size} shared account(s) in ${chunks.length} chunk(s)…`);
 
-  const used = new Set<string>();
-  const usage: Usage = { inputTokens: 0, outputTokens: 0 };
-  let fromCache = 0;
-  const results = await mapLimit(chunks, opts.concurrency ?? 3, async (chunk) => {
-    const user = formatSection(chunk, allChunks.length, ids, targets);
-    const key = hash(s.model, s.extract_effort, system, user);
-    const cacheFile = join(sessionDir, 'summary', 'disambiguate', `${String(chunk.index).padStart(3, '0')}.json`);
-    const cached = opts.force ? undefined : readJson<LabelCache>(cacheFile);
-    if (cached?.key === key) {
-      fromCache++;
-      used.add(cached.model);
-      return cached.labels;
-    }
-    const r = await model.disambiguate({ model: s.model, effort: s.extract_effort, system, user });
-    writeJson(cacheFile, { key, model: r.model, labels: r.value.labels, usage: r.usage } satisfies LabelCache);
-    used.add(r.model);
-    usage.inputTokens += r.usage.inputTokens;
-    usage.outputTokens += r.usage.outputTokens;
-    return r.value.labels;
+  const pass = await runChunkPass({
+    chunks,
+    model: s.model,
+    effort: s.extract_effort,
+    system,
+    user: (chunk) => formatSection(chunk, allChunks.length, ids, targets),
+    cacheFile: (chunk) => join(sessionDir, 'summary', 'disambiguate', `${String(chunk.index).padStart(3, '0')}.json`),
+    call: (o) => model.disambiguate(o),
+    ...(opts.force ? { force: true } : {}),
+    ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
   });
 
   const labelFor = new Map<number, Labels['labels'][number]>();
-  for (const l of results.flat()) labelFor.set(l.line, l);
+  for (const l of pass.values.flatMap((v) => v.labels)) labelFor.set(l.line, l);
 
   const stats = { labelled: 0, confident: 0, guessed: 0, unclear: 0 };
   const relabelled = lines.map((line): TranscriptLine => {
@@ -156,11 +133,11 @@ export async function disambiguateLines(
   return {
     lines: joinLines(relabelled, { mergeGapMs: config.transcript.merge_gap_seconds * 1000, maxLineMs: config.transcript.max_line_seconds * 1000 }),
     stats,
-    modelsUsed: [...used].sort(),
-    usage,
+    modelsUsed: pass.modelsUsed,
+    usage: pass.usage,
     promptVersion,
     chunks: chunks.length,
-    chunksFromCache: fromCache,
+    chunksFromCache: pass.fromCache,
   };
 }
 

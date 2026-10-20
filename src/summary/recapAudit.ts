@@ -1,21 +1,12 @@
-import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { Config } from '../config/schema.js';
-import { readJson, writeJson } from '../session/layout.js';
 import type { TranscriptLine } from '../transcript/merge.js';
-import { mapLimit } from '../util/retry.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
+import { runChunkPass } from './chunkPass.js';
 import type { AuditFindings, SummaryModel, Usage } from './model.js';
 import { loadTemplate, render } from './prompts.js';
 
 type Finding = AuditFindings['missing'][number];
-
-interface AuditCache {
-  key: string;
-  model: string;
-  missing: Finding[];
-  usage: Usage;
-}
 
 export interface RecapAuditResult {
   body: string;
@@ -44,12 +35,6 @@ const MIN_REVISION_LENGTH = 0.9;
 
 const SECTION_TITLE: Record<Finding['section'], string> = { npcs: 'NPCs', locations: 'Locations', events: 'What happened', combat: 'Combat', other: 'Other' };
 
-function hash(...parts: string[]): string {
-  const h = createHash('sha256');
-  for (const p of parts) h.update(p).update('\0');
-  return h.digest('hex');
-}
-
 function formatFindings(missing: readonly Finding[]): string {
   return missing.map((m) => `- (${m.section}) [${m.time}] ${m.detail}`).join('\n');
 }
@@ -74,30 +59,22 @@ export async function auditRecap(body: string, lines: readonly TranscriptLine[],
   const chunks = chunkTranscript(lines, { chunkMs: s.chunk_minutes * 60_000, contextMs: 60_000, maxChars: 60_000 });
   log(`Checking the recap against ${chunks.length} chunk(s) of the transcript…`);
 
-  const used = new Set<string>();
-  const auditUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-  let fromCache = 0;
-  const results = await mapLimit(chunks, opts.concurrency ?? 3, async (chunk) => {
-    const user = formatChunk(chunk, chunks.length);
-    const key = hash(s.model, s.extract_effort, system, user);
-    const cacheFile = join(opts.sessionDir, 'summary', 'audit', 'recap', `${String(chunk.index).padStart(3, '0')}.json`);
-    const cached = opts.force ? undefined : readJson<AuditCache>(cacheFile);
-    if (cached?.key === key) {
-      fromCache++;
-      used.add(cached.model);
-      return cached.missing;
-    }
-    const r = await model.audit({ model: s.model, effort: s.extract_effort, system, user });
-    const missing = r.value.missing.filter((m) => m.detail.trim());
-    writeJson(cacheFile, { key, model: r.model, missing, usage: r.usage } satisfies AuditCache);
-    used.add(r.model);
-    auditUsage.inputTokens += r.usage.inputTokens;
-    auditUsage.outputTokens += r.usage.outputTokens;
-    return missing;
+  const pass = await runChunkPass({
+    chunks,
+    model: s.model,
+    effort: s.extract_effort,
+    system,
+    user: (chunk) => formatChunk(chunk, chunks.length),
+    cacheFile: (chunk) => join(opts.sessionDir, 'summary', 'audit', 'recap', `${String(chunk.index).padStart(3, '0')}.json`),
+    call: (o) => model.audit(o),
+    ...(opts.force ? { force: true } : {}),
+    ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
   });
+  const used = new Set(pass.modelsUsed);
 
   const seen = new Set<string>();
-  const missing = results.flat().filter((m) => {
+  const missing = pass.values.flatMap((v) => v.missing).filter((m) => {
+    if (!m.detail.trim()) return false;
     const k = m.detail.trim().toLowerCase();
     return seen.has(k) ? false : (seen.add(k), true);
   });
@@ -106,10 +83,10 @@ export async function auditRecap(body: string, lines: readonly TranscriptLine[],
     missing,
     applied,
     modelsUsed: [...used].sort(),
-    usage: { audit: auditUsage, revise: reviseUsage },
+    usage: { audit: pass.usage, revise: reviseUsage },
     promptVersions: { audit: `${auditT.version}#${auditT.hash}`, revise: `${reviseT.version}#${reviseT.hash}` },
     chunks: chunks.length,
-    chunksFromCache: fromCache,
+    chunksFromCache: pass.fromCache,
   });
   if (!missing.length) {
     log('  Nothing missing.');
