@@ -5,6 +5,7 @@ import { href } from '../router';
 import type { Job, JobStep, SessionDetail, TranscriptLine } from '../types';
 import { Badge, Empty, Toggle } from '../ui';
 import { RecapCard } from './RecapCard';
+import { UnpairedCard } from './UnpairedCard';
 
 type Tab = 'transcript' | 'speakers' | 'summary';
 
@@ -111,6 +112,8 @@ export function SessionPage({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      <UnpairedCard s={s} onSaved={(d) => (setS(d), setJobs(d.jobs))} />
 
       <div className="tabs" role="tablist">
         {(['summary', 'speakers', 'transcript'] as Tab[])

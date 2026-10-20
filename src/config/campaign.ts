@@ -1,5 +1,6 @@
 import { parseIdentity, speakerNames, type Config, type Identity } from './schema.js';
 import type { SessionInfo } from '../session/layout.js';
+import type { TranscriptLine, UnpairedSpeaker } from '../shared/types.js';
 
 export interface Character extends Identity {
   userId: string;
@@ -56,4 +57,16 @@ export function partyBlock(campaign: Campaign, config: Pick<Config, 'speakers'>,
       return `- ${c.description}${player ? ` (played by ${player})` : ''}`;
     })
     .join('\n');
+}
+
+/** Who spoke in this session but is neither on the campaign's roster nor one of its guests. */
+export function unpairedSpeakers(campaign: Campaign | undefined, lines: readonly TranscriptLine[]): UnpairedSpeaker[] {
+  if (!campaign) return [];
+  const known = new Set([...campaign.characters.map((c) => c.userId), ...campaign.guests]);
+  const out = new Map<string, UnpairedSpeaker>();
+  for (const l of lines) {
+    if (known.has(l.userId) || out.has(l.userId)) continue;
+    out.set(l.userId, { userId: l.userId, name: l.player ?? l.inferred?.account ?? l.speaker });
+  }
+  return [...out.values()];
 }

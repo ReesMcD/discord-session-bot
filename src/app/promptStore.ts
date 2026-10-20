@@ -13,7 +13,7 @@ export const PLACEHOLDERS: Record<PromptName, string[]> = {
   extract: ['context', 'include_rules', 'exclude_rules'],
   synthesize: ['context', 'include_rules', 'exclude_rules', 'detail', 'detail_guidance', 'citation_guidance'],
   disambiguate: ['context', 'accounts'],
-  cleanup: ['context', 'vocabulary'],
+  cleanup: ['context', 'vocabulary', 'unpaired'],
   audit: ['context', 'recap'],
   revise: ['context', 'citation_guidance'],
 };

@@ -274,6 +274,45 @@ test('saving from the app adds only the values that differ from the defaults', (
   assert.doesNotMatch(readFileSync(join(root, 'new.yaml'), 'utf8'), /include|cleanup|after_stop/);
 });
 
+test('unpaired speakers: pair (and rebuild the transcript), mark as guest, or ignore; each is remembered', async () => {
+  const CHANNEL = '111111111111111111';
+  const ROBIN = '555555555555555555';
+  const PAT = '666666666666666666';
+  const { req, dir, jobs, configPath } = setup(`campaigns:\n  "${CHANNEL}":\n    name: Curse of Strahd\n`);
+  writeJson(join(dir, 'summary', 'unpaired.json'), [
+    { userId: REES, name: 'Rees', role: 'new_player', character: 'Garrick', time: '00:00:01' },
+    { userId: ROBIN, name: 'Robin' },
+    { userId: PAT, name: 'Pat', role: 'guest' },
+  ]);
+  const decide = (userId: string, body: object) => req(`/sessions/game-1/unpaired/${userId}`, { method: 'POST', body: JSON.stringify(body) });
+  type Detail = { unpaired: { userId: string }[]; jobs: { step: string }[] };
+  const pending = async () => ((await (await req('/sessions/game-1')).json()) as Detail).unpaired.map((u) => u.userId);
+  assert.deepEqual(await pending(), [REES, ROBIN, PAT]);
+
+  assert.equal((await decide(REES, { action: 'pair', character: '  ' })).status, 400);
+  assert.equal((await decide(REES, { action: 'nope' })).status, 400);
+  const paired = (await (await decide(REES, { action: 'pair', character: 'Garrick' })).json()) as Detail;
+  assert.ok(paired.jobs.some((j) => j.step === 'merge'), 'the transcript is rebuilt with the new name');
+  await jobs.idle();
+  assert.match(readFileSync(paths.transcript(dir), 'utf8'), /\[00:00:01\] Garrick: Hello table\./);
+
+  await decide(PAT, { action: 'guest' });
+  await decide(ROBIN, { action: 'ignore' });
+  assert.deepEqual(await pending(), []);
+  const yaml = readFileSync(configPath, 'utf8');
+  assert.match(yaml, new RegExp(`"${REES}":\\n\\s+name: Garrick`));
+  assert.match(yaml, new RegExp(`guests:\\n\\s+- "${PAT}"`));
+  assert.doesNotMatch(yaml, new RegExp(ROBIN), 'ignore only applies to this session');
+});
+
+test('pairing needs a campaign for the session', async () => {
+  const { req, dir } = setup();
+  writeJson(join(dir, 'summary', 'unpaired.json'), [{ userId: REES, name: 'Rees' }]);
+  const res = await req(`/sessions/game-1/unpaired/${REES}`, { method: 'POST', body: JSON.stringify({ action: 'guest' }) });
+  assert.equal(res.status, 400);
+  assert.match(((await res.json()) as { error: string }).error, /no campaign/);
+});
+
 test('replacing an inline list keeps its comment, above the key', () => {
   const root = mkdtempSync(join(tmpdir(), 'app-'));
   const file = join(root, 'config.yaml');

@@ -16,6 +16,7 @@ export type {
   SessionSummary,
   SummaryMeta,
   TranscriptLine,
+  UnpairedSpeaker,
 } from '../../src/shared/types';
 
 /** A session as GET /sessions/:id returns it, with its jobs. */

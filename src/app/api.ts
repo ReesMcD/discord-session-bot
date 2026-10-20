@@ -9,6 +9,7 @@ import { SESSION_FILES, knownPeople, listSessions, sessionDetail, sessionDirFor 
 import { existsSync, readFileSync } from 'node:fs';
 import type { PromptName } from '../summary/prompts.js';
 import { saveRecapEdit } from '../summary/recapEdits.js';
+import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
 
 export interface ApiOptions {
@@ -41,7 +42,7 @@ export function createApi(opts: ApiOptions): Hono {
   api.get('/sessions', (c) => c.json(listSessions(opts.dataDir)));
 
   api.get('/sessions/:id', (c) => {
-    const detail = sessionDetail(opts.dataDir, c.req.param('id'));
+    const detail = sessionDetail(opts.dataDir, c.req.param('id'), opts.configStore.read().config);
     if (!detail) return c.json({ error: 'not found' }, 404);
     return c.json({ ...detail, jobs: opts.jobs.list(detail.id) });
   });
@@ -72,7 +73,31 @@ export function createApi(opts: ApiOptions): Hono {
     } catch (err) {
       return c.json({ error: (err as Error).message }, 400);
     }
-    return c.json({ ...sessionDetail(opts.dataDir, id)!, jobs: opts.jobs.list(id) });
+    return c.json({ ...sessionDetail(opts.dataDir, id, opts.configStore.read().config)!, jobs: opts.jobs.list(id) });
+  });
+
+  /** Pair someone who isn't on the roster yet, mark them a guest, or ignore them for this session. */
+  api.post('/sessions/:id/unpaired/:userId', async (c) => {
+    const id = c.req.param('id');
+    const dir = sessionDirFor(opts.dataDir, id);
+    if (!dir) return c.json({ error: 'not found' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as Partial<UnpairedAction> & { character?: unknown };
+    if (body.action !== 'pair' && body.action !== 'guest' && body.action !== 'ignore') return c.json({ error: 'action must be pair, guest or ignore' }, 400);
+    const decision = (body.action === 'pair' ? { action: 'pair', character: typeof body.character === 'string' ? body.character : '' } : { action: body.action }) as UnpairedAction;
+    const state = opts.configStore.read();
+    if (!state.config) return c.json({ error: `Fix config.yaml first: ${state.error}` }, 400);
+    try {
+      const next = resolveUnpaired(dir, state.config, c.req.param('userId'), decision);
+      if (next) {
+        const saved = opts.configStore.write(next);
+        if (saved.errors.length) return c.json({ error: saved.errors[0]!.message }, 400);
+        // Names in the transcript follow the roster.
+        if (decision.action === 'pair') opts.jobs.enqueue(id, 'merge');
+      }
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+    return c.json({ ...sessionDetail(opts.dataDir, id, opts.configStore.read().config)!, jobs: opts.jobs.list(id) });
   });
 
   api.get('/people', (c) => c.json(knownPeople(opts.dataDir)));

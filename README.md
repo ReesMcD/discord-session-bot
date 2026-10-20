@@ -300,6 +300,13 @@ speaker filter shows "Thorin (Sam)"), and the recap knows party members aren't N
 kills to characters. After changing the roster, press **Rebuild transcript** on older sessions
 (no API calls). A Craig import uses the campaign if there's only one.
 
+**New at the table:** if someone talks in a campaign session but isn't on its roster, the clean-up
+step guesses whether they're a new player (and which character, if anyone says it) or a guest.
+The session page then asks once, under **New at the table**: **Pair** (as the guessed character,
+editable), **Guest**, or **Ignore**. Pairing adds them to the roster and rebuilds the transcript
+with their character name. Until you decide, the recap treats a likely new player as part of the
+party, and a guest's lines as table talk.
+
 **Editing:** on the session's **Recap** tab you can **Copy** the Markdown, add a note to any
 section, or **Edit** the whole thing (with a preview). The first edit keeps the generated version
 in `summary/generated.md`. Writing a new recap asks first, and moves your edited one to

@@ -67,6 +67,8 @@ export interface SessionDetail extends SessionSummary {
   /** Whether the recap is as generated or was edited by hand, and when. */
   recapState: RecapState | null;
   editedAt: string | null;
+  /** People to pair (still unpaired under the current roster, not dismissed). */
+  unpaired: UnpairedSpeaker[];
 }
 
 /** GET /sessions/:id also lists the session's jobs. */
@@ -77,6 +79,23 @@ export interface Person {
   names: string[];
   sessions: number;
   lastSeen: number;
+}
+
+/**
+ * Someone who spoke in a campaign session without being on its roster (or its guests). The guess
+ * comes from the clean-up pass when it ran.
+ */
+export interface UnpairedSpeaker {
+  userId: string;
+  /** Their name as the transcript shows it. */
+  name: string;
+  role?: 'new_player' | 'guest';
+  /** The character they seem to play, when the transcript says. */
+  character?: string;
+  /** The line that shows it, HH:MM:SS. */
+  time?: string;
+  /** Set when "Ignore" was pressed for this session. */
+  dismissed?: boolean;
 }
 
 // --- The recap -----------------------------------------------------------------------------------

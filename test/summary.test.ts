@@ -11,6 +11,7 @@ import { campaignFor, parseCharacter } from '../src/config/campaign.js';
 import { parseDndBeyondId } from '../web/src/dndbeyond.js';
 import { chunkTranscript, formatChunk } from '../src/summary/chunk.js';
 import { auditCleanup, similarity, type Proposal } from '../src/summary/cleanupAudit.js';
+import { combineGuesses } from '../src/summary/cleanup.js';
 import { contextBlock } from '../src/summary/context.js';
 import { AnthropicSummaryModel, SummaryError, type Extraction } from '../src/summary/model.js';
 import { loadTemplate, PROMPT_VERSIONS, render } from '../src/summary/prompts.js';
@@ -293,6 +294,44 @@ test('recap audit: a revision that lost content is not trusted; the findings are
   assert.match(md, /## Also mentioned\n\n_Found by the completeness check; move these where they belong\._\n\n- \*\*Locations\*\* \[00:00:05\]: The Blood on the Vine tavern\./);
   assert.match(md, /\*\*Strahd\*\*/, 'original content kept');
   assert.equal(appendFindings('x', []).includes('Also mentioned'), true);
+});
+
+test('unpaired: one guess per person from all chunks (majority role, most common name, earliest line)', () => {
+  const people = [{ userId: '1', name: 'Alex' }, { userId: '2', name: 'Pat' }, { userId: '3', name: 'Quiet' }];
+  const guesses = combineGuesses(people, [
+    [{ speaker: 1, role: 'new_player', character: 'Garrick', time: '00:40:00' }, { speaker: 2, role: 'guest', character: '', time: '00:10:00' }],
+    [{ speaker: 1, role: 'new_player', character: 'garrick', time: '00:12:04' }, { speaker: 1, role: 'guest', character: '', time: '00:05:00' }],
+    [{ speaker: 1, role: 'new_player', character: 'Gareth', time: '01:00:00' }],
+  ]);
+  assert.deepEqual(guesses, [
+    { userId: '1', name: 'Alex', role: 'new_player', character: 'Garrick', time: '00:12:04' },
+    { userId: '2', name: 'Pat', role: 'guest', time: '00:10:00' },
+    { userId: '3', name: 'Quiet' },
+  ]);
+});
+
+test('unpaired: the clean-up asks about people off the roster, and the recap treats a likely new player as party', async () => {
+  const NEW = '555555555555555555';
+  const GUEST = '666666666666666666';
+  const lines = [line(0.08, 'Sam', 'We go to Barovia.', SAM), line(0.15, 'Alex', 'Garrick, roll initiative!', ALEX), line(0.2, 'Robin', 'I swing at the wolf.', NEW), line(0.3, 'Pat', 'Can I watch?', GUEST)];
+  const { dir, cfg } = session(`  recap_audit: false\n`, lines);
+  cfg.campaigns[CHANNEL]!.guests.push(GUEST);
+  const model = new FakeModel({
+    cleanup: (o) => ({ unpaired: o.system.includes('U1: Robin') ? [{ speaker: 1, role: 'new_player', character: 'Garrick', time: '00:00:12' }] : [] }),
+    extract: () => notes({ combats: [{ start: '00:00:09', end: '00:00:20', opponents: ['wolf'], summary: '', deaths: ['wolf'], kills: [{ by: 'garrick', target: 'wolf' }] }] }),
+    synthesize: () => RECAP,
+  });
+  const { meta } = await summarizeSession(dir, cfg, 'h', model, { log: () => {} });
+
+  assert.match(model.calls.cleanup[0]!.system, /## People not on the roster yet\n\nU1: Robin\n/);
+  assert.doesNotMatch(model.calls.cleanup[0]!.system, /U2/, 'guests and paired players are not asked about');
+  assert.deepEqual(readJson(summaryPaths.unpaired(dir)), [{ userId: NEW, name: 'Robin', role: 'new_player', character: 'Garrick', time: '00:00:12' }]);
+  assert.match(model.calls.extract[0]!.system, /## Not on the roster yet\n\n- Robin: probably a new player, playing Garrick \(not confirmed yet\)\. Treat Garrick as part of the party, not an NPC\./);
+  assert.deepEqual(meta.kills, [['Garrick', 1]], 'kills credited to the guessed character');
+
+  const off = session(`  cleanup: false\n  recap_audit: false\n`, lines);
+  await summarizeSession(off.dir, off.cfg, 'h', new FakeModel({ synthesize: () => RECAP }), { log: () => {} });
+  assert.deepEqual(readJson(summaryPaths.unpaired(off.dir)), [{ userId: NEW, name: 'Robin' }, { userId: GUEST, name: 'Pat' }], 'without clean-up: listed, no guesses');
 });
 
 test('edits: saving keeps the generated recap; regenerating keeps the edited one', async () => {
