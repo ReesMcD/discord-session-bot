@@ -1,11 +1,13 @@
 /** The Scrying Eye mark and the nav icons: inline stroke SVGs that take the text colour. */
 
-export function EyeMark({ size = 28 }: { size?: number }) {
+/** The Scrying Eye mark: a crystal orb in a cradle with an eye inside (matches scripts/make-icons.mjs). */
+export function OrbMark({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <path d="M2 16C6.5 8.5 11 5.5 16 5.5S25.5 8.5 30 16C25.5 23.5 21 26.5 16 26.5S6.5 23.5 2 16Z" stroke="currentColor" strokeWidth="1.7" />
-      <circle cx="16" cy="16" r="6.5" stroke="currentColor" strokeWidth="1.7" />
-      <circle cx="16" cy="16" r="2.6" fill="currentColor" />
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="16" cy="13.5" r="10.5" />
+      <path d="M9.5 21.5 8 27.5h16l-1.5-6" />
+      <path d="M10 13.5C12 10.8 14 9.5 16 9.5S20 10.8 22 13.5C20 16.2 18 17.5 16 17.5S12 16.2 10 13.5Z" />
+      <circle cx="16" cy="13.5" r="1.7" fill="currentColor" stroke="none" />
     </svg>
   );
 }

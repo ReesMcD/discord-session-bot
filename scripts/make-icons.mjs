@@ -45,43 +45,80 @@ function png(size, pixel) {
   ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
-const dist = (x, y) => Math.hypot(x - 0.5, y - 0.5);
 const clear = [0, 0, 0, 0];
 
-/**
- * Signed distance to the eye's almond (negative inside): the overlap of two circles, so its
- * corners come to a point. hw/hh are the almond's half-width and half-height.
+/*
+ * The Scrying Eye mark: a crystal orb on a stand, drawn in the 32-unit space of the web UI's
+ * OrbMark SVG (web/src/icons.tsx), so the PNGs and the SVGs match. Orb: centre (16, 13.5), radius
+ * 10.5. Stand: a cradle from the orb's sides, (9.5, 21.5) → (8, 27.5) → (24, 27.5) → (22.5, 21.5).
+ * Inside the full mark, an eye; the small mark has a glint of light instead, because a dot in the
+ * middle makes it read as a webcam.
  */
-function eye(x, y, hw, hh) {
+const ORB = { x: 16, y: 13.5, r: 10.5 };
+const STAND = [[9.5, 21.5], [8, 27.5], [24, 27.5], [22.5, 21.5]];
+const MARK_CENTRE_Y = 15.25; // halfway between the orb's top (3) and the stand's foot (27.5)
+
+function segmentDistance(px, py, [ax, ay], [bx, by]) {
+  const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)));
+  return Math.hypot(px - ax - t * (bx - ax), py - ay - t * (by - ay));
+}
+const onStand = (gx, gy, line) => STAND.slice(1).some((p, k) => segmentDistance(gx, gy, STAND[k], p) < line / 2);
+const toOrb = (gx, gy) => Math.hypot(gx - ORB.x, gy - ORB.y);
+
+/**
+ * Signed distance to an almond (negative inside): the overlap of two circles, so its corners
+ * come to a point. hw/hh are its half-width and half-height.
+ */
+function almond(gx, gy, cx, cy, hw, hh) {
   const c = (hw * hw - hh * hh) / (2 * hh);
   const r = hh + c;
-  return Math.max(Math.hypot(x - 0.5, y - 0.5 - c) - r, Math.hypot(x - 0.5, y - 0.5 + c) - r);
+  return Math.max(Math.hypot(gx - cx, gy - cy - c) - r, Math.hypot(gx - cx, gy - cy + c) - r);
 }
-const stroke = (sd, w) => Math.abs(sd) < w / 2;
 
-// The Scrying Eye mark: an almond outline, a ring for the iris, a solid pupil.
-const mark = (x, y, { hw, hh, line, iris, pupil }) => {
-  const d = dist(x, y);
-  return stroke(eye(x, y, hw, hh), line) || Math.abs(d - iris) < line / 2 || d < pupil;
+/** Maps a pixel (0–1) to mark units, with the mark filling `scale` of the image. */
+const toMark = (x, y, scale) => [16 + ((x - 0.5) * 32) / scale, MARK_CENTRE_Y + ((y - 0.5) * 32) / scale];
+
+// Full mark (app icon): orb outline and stand, an eye inside, a solid pupil.
+const fullMark = (gx, gy, line) =>
+  Math.abs(toOrb(gx, gy) - ORB.r) < line / 2 ||
+  onStand(gx, gy, line) ||
+  Math.abs(almond(gx, gy, ORB.x, ORB.y, 6, 4)) < line / 2 ||
+  toOrb(gx, gy) < 1.7;
+
+// The glint: an arc of radius 6 inside the orb, upper left (200° to 245°, y pointing down).
+const GLINT = { r: 6, from: 200, to: 245 };
+const polar = (deg, r) => [ORB.x + r * Math.cos((deg * Math.PI) / 180), ORB.y + r * Math.sin((deg * Math.PI) / 180)];
+function onGlint(gx, gy, line) {
+  const angle = ((Math.atan2(gy - ORB.y, gx - ORB.x) * 180) / Math.PI + 360) % 360;
+  if (angle >= GLINT.from && angle <= GLINT.to && Math.abs(toOrb(gx, gy) - GLINT.r) < line / 2) return true;
+  return [GLINT.from, GLINT.to].some((deg) => {
+    const [ex, ey] = polar(deg, GLINT.r);
+    return Math.hypot(gx - ex, gy - ey) < line / 2; // round caps
+  });
+}
+
+// Menu bar (template: black + alpha; macOS tints it). At 16 px the inner eye blurs, so the small
+// mark is the orb, the stand and the glint.
+const SMALL = { scale: 0.98, line: 2.6 };
+const smallOutline = (gx, gy) => Math.abs(toOrb(gx, gy) - ORB.r) < SMALL.line / 2 || onStand(gx, gy, SMALL.line);
+const tray = (x, y) => {
+  const [gx, gy] = toMark(x, y, SMALL.scale);
+  return smallOutline(gx, gy) || onGlint(gx, gy, SMALL.line) ? [0, 0, 0, 1] : clear;
 };
-
-// Menu bar (template: black + alpha; macOS tints it). At 16 px the iris ring would blur into the
-// outline, so the menu bar version is the outline and a solid iris.
-const TRAY = { hw: 0.47, hh: 0.28, line: 0.07, iris: 0.15 };
-const tray = (x, y) => (stroke(eye(x, y, TRAY.hw, TRAY.hh), TRAY.line) || dist(x, y) < TRAY.iris ? [0, 0, 0, 1] : clear);
-// Recording: the same eye with a red iris (not a template, so it stays red).
+// Recording: the orb in red, glowing (not a template, so it stays red on light and dark menu bars).
 const trayRec = (x, y) => {
-  if (dist(x, y) < TRAY.iris) return [230, 57, 70, 1];
-  return stroke(eye(x, y, TRAY.hw, TRAY.hh), TRAY.line) ? [0, 0, 0, 1] : clear;
+  const [gx, gy] = toMark(x, y, SMALL.scale);
+  if (smallOutline(gx, gy) || onGlint(gx, gy, SMALL.line)) return [230, 57, 70, 1];
+  return toOrb(gx, gy) < ORB.r ? [230, 57, 70, 0.4] : clear;
 };
-// App icon: an ink-blue rounded square, the eye in pale teal with a faint glow behind the iris.
+// App icon: an ink-blue rounded square, the orb in pale teal with a faint glow inside the glass.
 const app = (x, y) => {
   const m = 0.09, rad = 0.2;
   const qx = Math.max(Math.abs(x - 0.5) - (0.5 - m - rad), 0), qy = Math.max(Math.abs(y - 0.5) - (0.5 - m - rad), 0);
   if (Math.hypot(qx, qy) > rad) return clear;
-  const teal = [127, 231, 212, 1];
-  if (mark(x, y, { hw: 0.33, hh: 0.19, line: 0.03, iris: 0.115, pupil: 0.05 })) return teal;
-  const glow = Math.max(0, 1 - dist(x, y) / 0.17) * 0.22;
+  const [gx, gy] = toMark(x, y, 0.66);
+  if (fullMark(gx, gy, 1.45)) return [127, 231, 212, 1];
+  const glow = toOrb(gx, gy) < ORB.r ? Math.max(0, 1 - Math.hypot(gx - 14, gy - 11) / 11) * 0.24 : 0;
   const base = [13 + 8 * y, 15 + 10 * y, 21 + 16 * y];
   return [base[0] + (127 - base[0]) * glow, base[1] + (231 - base[1]) * glow, base[2] + (212 - base[2]) * glow, 1].map((v, k) => (k < 3 ? Math.round(v) : v));
 };

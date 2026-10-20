@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, auth, subscribe } from './api';
-import { CampaignsIcon, EyeMark, RecordIcon, SessionsIcon, SettingsIcon } from './icons';
+import { CampaignsIcon, OrbMark, RecordIcon, SessionsIcon, SettingsIcon } from './icons';
 import type { BotStatus } from './types';
 import { href, useRoute } from './router';
 import { SessionsPage } from './pages/SessionsPage';
@@ -32,7 +32,7 @@ function Shell({ route }: { route: string[] }) {
     <div className="shell">
       <aside className="sidebar">
         <a className="brand" href={href('sessions')}>
-          <EyeMark /> Scrying Eye
+          <OrbMark /> Scrying Eye
         </a>
         <nav className="side-nav" aria-label="Main">
           {NAV.slice(0, 2).map(({ key, label, Icon }) => (
@@ -55,7 +55,7 @@ function Shell({ route }: { route: string[] }) {
       <div className="main">
         <header className="mobile-top">
           <a className="brand" href={href('sessions')}>
-            <EyeMark size={24} /> Scrying Eye
+            <OrbMark size={24} /> Scrying Eye
           </a>
           {recording && (
             <a className="rec-pill" href={href('record')}>
@@ -116,7 +116,7 @@ function Login({ onDone }: { onDone: () => void }) {
     <div className="login-wrap">
     <form className="card login" onSubmit={submit}>
       <div className="brand" style={{ marginBottom: 16 }}>
-        <EyeMark /> Scrying Eye
+        <OrbMark /> Scrying Eye
       </div>
       <label className="field">
         <span className="field-label">Password</span>
