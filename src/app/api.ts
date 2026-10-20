@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
-import { requirePassword } from './auth.js';
+import { requirePassword, type PasswordSource } from './auth.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner, type Job, type JobStep } from './jobs.js';
 import { DEFAULT_PROMPTS_DIR, PROMPT_NAMES, checkTemplate, deletePrompt, readPrompts, writePrompt } from './promptStore.js';
@@ -12,7 +12,7 @@ import { saveRecapEdit } from '../summary/recapEdits.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
 
 export interface ApiOptions {
-  password: string;
+  password: PasswordSource;
   dataDir: string;
   configStore: ConfigStore;
   jobs: JobRunner;

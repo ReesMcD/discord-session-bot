@@ -275,7 +275,7 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
 
     bot = new BotService({ dataDir, configPath, log });
     try {
-      server = await startServer({ password: secrets.password, port: PORT, host: '0.0.0.0', dataDir, configPath, webDist, bot, log });
+      server = await startServer({ password: () => secrets.password, port: PORT, host: '0.0.0.0', dataDir, configPath, webDist, bot, log });
     } catch (err) {
       const busy = (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
       await dialog.showMessageBox({

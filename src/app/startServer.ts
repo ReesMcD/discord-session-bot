@@ -5,6 +5,7 @@ import { serve, type ServerType } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { createApi } from './api.js';
+import type { PasswordSource } from './auth.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
@@ -12,7 +13,8 @@ import { PROVIDERS } from '../transcription/openaiCompatible.js';
 import type { BotService } from '../bot/BotService.js';
 
 export interface ServerOptions {
-  password: string;
+  /** Pass a function when the password can change while the server runs. */
+  password: PasswordSource;
   port?: number;
   host?: string;
   dataDir: string;

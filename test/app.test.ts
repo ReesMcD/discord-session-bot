@@ -45,6 +45,17 @@ test('every route needs the password', async () => {
   assert.deepEqual(await ok.json(), { ok: true, keys: { anthropic: false } });
 });
 
+test('a changed password applies at once: the old one stops working, the new one works', async () => {
+  let current = 'first password 1';
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const api = createApi({ password: () => current, dataDir: root, configStore: new ConfigStore(join(root, 'c.yaml')), jobs: new JobRunner(async () => {}) });
+  const health = async (p: string) => (await api.request('/health', { headers: { Authorization: `Bearer ${p}` } })).status;
+  assert.equal(await health('first password 1'), 200);
+  current = 'second password 2';
+  assert.equal(await health('first password 1'), 401);
+  assert.equal(await health('second password 2'), 200);
+});
+
 test('lists sessions and rejects path tricks', async () => {
   const { req } = setup();
   const list = (await (await req('/sessions')).json()) as { id: string; has: Record<string, boolean>; speakers: string[] }[];
