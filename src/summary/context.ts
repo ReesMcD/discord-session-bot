@@ -9,7 +9,8 @@ import { campaignFor, partyBlock } from '../config/campaign.js';
  */
 export function contextBlock(session: SessionInfo, lines: readonly TranscriptLine[], config: Pick<Config, 'summary' | 'transcript' | 'campaigns' | 'speakers'>): string {
   const spoken = new Map<string, string>();
-  for (const l of lines) if (!spoken.has(l.userId)) spoken.set(l.userId, l.inferred?.account ?? l.speaker);
+  // The person, not the character: transcripts in a campaign are named by character.
+  for (const l of lines) if (!spoken.has(l.userId)) spoken.set(l.userId, l.player ?? l.inferred?.account ?? l.speaker);
   const speakers = [...new Set(lines.map((l) => l.speaker))].join(', ');
   const timeZone = config.transcript.timezone;
   const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'full', ...(timeZone ? { timeZone } : {}) }).format(session.startedAt);

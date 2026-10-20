@@ -33,6 +33,8 @@ export interface TranscriptLine {
   startMs: number;
   endMs: number;
   text: string;
+  /** The real name of whoever spoke, when `speaker` is their character's name (campaign sessions). */
+  player?: string;
   /**
    * Set when the speaker was inferred by the disambiguation pass for a shared account:
    * `account` is the account's own name, `confidence` how sure Claude was.

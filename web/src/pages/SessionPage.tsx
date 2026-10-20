@@ -145,8 +145,10 @@ function Transcript({ lines, onDownload }: { lines: TranscriptLine[]; onDownload
   const [query, setQuery] = useState('');
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const speakers = useMemo(() => [...new Set(lines.map((l) => l.speaker))], [lines]);
+  // In campaign sessions lines are named by character; show who plays them.
+  const playerOf = useMemo(() => new Map(lines.filter((l) => l.player).map((l) => [l.speaker, l.player!])), [lines]);
   const q = query.trim().toLowerCase();
-  const shown = lines.filter((l) => !hidden.has(l.speaker) && (!q || l.text.toLowerCase().includes(q) || l.speaker.toLowerCase().includes(q)));
+  const shown = lines.filter((l) => !hidden.has(l.speaker) && (!q || l.text.toLowerCase().includes(q) || l.speaker.toLowerCase().includes(q) || !!l.player?.toLowerCase().includes(q)));
   const labelled = lines.filter((l) => l.inferred);
 
   return (
@@ -166,6 +168,7 @@ function Transcript({ lines, onDownload }: { lines: TranscriptLine[]; onDownload
             onClick={() => setHidden((h) => (h.has(sp) ? new Set([...h].filter((x) => x !== sp)) : new Set([...h, sp])))}
           >
             {sp}
+            {playerOf.get(sp) && <span className="muted"> ({playerOf.get(sp)})</span>}
           </button>
         ))}
       </div>

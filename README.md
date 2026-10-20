@@ -295,8 +295,10 @@ transcript each (see [Costs](#costs)).
 **Campaigns:** set each voice channel's roster once in **Settings → Campaigns**: every person's
 real name, their character (and a short description like "dwarf fighter 5"), their D&D Beyond
 sheet, plus any guests who talk but don't play. It's saved in the app, so you never set it up
-again. The recap then knows party members aren't NPCs and credits kills to characters. A Craig
-import uses the campaign if there's only one.
+again. Transcripts then show character names (`[01:12:04] Thorin: I kick the door in.`; the
+speaker filter shows "Thorin (Sam)"), and the recap knows party members aren't NPCs and credits
+kills to characters. After changing the roster, press **Rebuild transcript** on older sessions
+(no API calls). A Craig import uses the campaign if there's only one.
 
 **Editing:** on the session's **Recap** tab you can **Copy** the Markdown, add a note to any
 section, or **Edit** the whole thing (with a preview). The first edit keeps the generated version
