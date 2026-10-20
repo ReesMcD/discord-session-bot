@@ -131,6 +131,19 @@ export const configSchema = z
 
 export type Config = z.infer<typeof configSchema>;
 
+/**
+ * Zod reports a bad map key (speakers, campaigns, characters) as "Invalid key in record" and hides
+ * our message; put the key and the reason back. Mutates and returns the error.
+ */
+export function explainKeyErrors(error: z.ZodError): z.ZodError {
+  for (const issue of error.issues) {
+    if (issue.code !== 'invalid_key') continue;
+    const key = String(issue.path.at(-1));
+    (issue as { message: string }).message = `"${key}" ${issue.issues[0]?.message ?? 'is not a valid key'}`; // issues are plain objects; the type is read-only
+  }
+  return error;
+}
+
 export interface Identity {
   /** Short label used in transcripts, e.g. "DM". */
   label: string;

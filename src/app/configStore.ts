@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Document, isMap, isScalar, parseDocument, YAMLMap } from 'yaml';
 import { z } from 'zod';
-import { configSchema, type Config } from '../config/schema.js';
+import { configSchema, explainKeyErrors, type Config } from '../config/schema.js';
 import { ConfigError, parseConfig } from '../config/load.js';
 
 export interface ConfigState {
@@ -39,7 +39,7 @@ export class ConfigStore {
   static validate(value: unknown): { config?: Config; errors: FieldError[] } {
     const r = configSchema.safeParse(value);
     if (r.success) return { config: r.data, errors: [] };
-    return { errors: r.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
+    return { errors: explainKeyErrors(r.error).issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
   }
 
   /**

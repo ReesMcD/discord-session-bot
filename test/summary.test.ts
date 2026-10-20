@@ -76,7 +76,7 @@ test('campaign: matched by voice channel, the only campaign for sessions without
   assert.equal(campaignFor(config, { channelId: '999999999999999999' }), undefined);
   const two = parseConfig(`${CAMPAIGN}  "444444444444444444":\n    name: Other\n`).config;
   assert.equal(campaignFor(two, {}), undefined, 'ambiguous with two campaigns');
-  assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "nope": Thorin\n`), /Invalid key.*characters\.nope/s);
+  assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "nope": Thorin\n`), /"nope" must be a Discord ID \(15–22 digits\)\n  → at campaigns\.111111111111111111\.characters\.nope/);
 });
 
 test('the prompt context lists the party, who plays whom, and the campaign background', () => {

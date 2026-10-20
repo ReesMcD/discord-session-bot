@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ConfigError, parseConfig } from '../src/config/load.js';
+import { ConfigStore } from '../src/app/configStore.js';
 
 test('empty config yields full defaults', () => {
   const { config, hash } = parseConfig('');
@@ -34,4 +35,10 @@ test('the example config is valid', async () => {
   const { readFileSync } = await import('node:fs');
   const { config } = parseConfig(readFileSync(new URL('../config.example.yaml', import.meta.url), 'utf8'));
   assert.equal(config.transcription.provider, 'groq');
+});
+
+test('a bad Discord ID used as a map key names the key and says what is wrong', () => {
+  assert.throws(() => parseConfig('speakers:\n  Rees: Rees\n'), /"Rees" must be a Discord ID \(15–22 digits\)\n  → at speakers\.Rees/);
+  const { errors } = ConfigStore.validate({ campaigns: { '12': { characters: {} } } });
+  assert.deepEqual(errors, [{ path: 'campaigns.12', message: '"12" must be a Discord ID (15–22 digits)' }]);
 });
