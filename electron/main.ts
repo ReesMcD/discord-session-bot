@@ -2,7 +2,7 @@
  * Session Bot for macOS: a menu bar app that runs the Discord bot, the API and the web UI in one
  * process. Data lives in ~/Library/Application Support/Session Bot/.
  */
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerSaveBlocker, safeStorage, shell, Tray, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerSaveBlocker, safeStorage, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync } from 'node:fs';
@@ -84,6 +84,8 @@ function openWindow(route = ''): void {
     minWidth: 380,
     minHeight: 500,
     title: 'Session Bot',
+    // The UI's own background, so the window doesn't flash white while it loads.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0d0f15' : '#f4f5f8',
     show: false,
     webPreferences: { preload: join(app.getAppPath(), 'dist-electron', 'preload.cjs'), contextIsolation: true, sandbox: true },
   });

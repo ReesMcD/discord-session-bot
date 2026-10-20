@@ -48,26 +48,42 @@ function png(size, pixel) {
 const dist = (x, y) => Math.hypot(x - 0.5, y - 0.5);
 const clear = [0, 0, 0, 0];
 
-// Menu bar (template: black + alpha; macOS tints it): a ring with a dot, like a record button.
-const tray = (x, y) => {
+/**
+ * Signed distance to the eye's almond (negative inside): the overlap of two circles, so its
+ * corners come to a point. hw/hh are the almond's half-width and half-height.
+ */
+function eye(x, y, hw, hh) {
+  const c = (hw * hw - hh * hh) / (2 * hh);
+  const r = hh + c;
+  return Math.max(Math.hypot(x - 0.5, y - 0.5 - c) - r, Math.hypot(x - 0.5, y - 0.5 + c) - r);
+}
+const stroke = (sd, w) => Math.abs(sd) < w / 2;
+
+// The Scrying Eye mark: an almond outline, a ring for the iris, a solid pupil.
+const mark = (x, y, { hw, hh, line, iris, pupil }) => {
   const d = dist(x, y);
-  return (d < 0.42 && d > 0.32) || d < 0.18 ? [0, 0, 0, 1] : clear;
+  return stroke(eye(x, y, hw, hh), line) || Math.abs(d - iris) < line / 2 || d < pupil;
 };
-// Recording: same shape, filled red dot (not a template, so it stays red).
+
+// Menu bar (template: black + alpha; macOS tints it). At 16 px the iris ring would blur into the
+// outline, so the menu bar version is the outline and a solid iris.
+const TRAY = { hw: 0.47, hh: 0.28, line: 0.07, iris: 0.15 };
+const tray = (x, y) => (stroke(eye(x, y, TRAY.hw, TRAY.hh), TRAY.line) || dist(x, y) < TRAY.iris ? [0, 0, 0, 1] : clear);
+// Recording: the same eye with a red iris (not a template, so it stays red).
 const trayRec = (x, y) => {
-  const d = dist(x, y);
-  if (d < 0.2) return [230, 57, 70, 1];
-  return d < 0.42 && d > 0.32 ? [0, 0, 0, 1] : clear;
+  if (dist(x, y) < TRAY.iris) return [230, 57, 70, 1];
+  return stroke(eye(x, y, TRAY.hw, TRAY.hh), TRAY.line) ? [0, 0, 0, 1] : clear;
 };
-// App icon: rounded indigo square, white ring and dot.
+// App icon: an ink-blue rounded square, the eye in pale teal with a faint glow behind the iris.
 const app = (x, y) => {
   const m = 0.09, rad = 0.2;
   const qx = Math.max(Math.abs(x - 0.5) - (0.5 - m - rad), 0), qy = Math.max(Math.abs(y - 0.5) - (0.5 - m - rad), 0);
   if (Math.hypot(qx, qy) > rad) return clear;
-  const d = dist(x, y);
-  if ((d < 0.27 && d > 0.2) || d < 0.12) return [255, 255, 255, 1];
-  const t = y;
-  return [Math.round(88 + (72 - 88) * t), Math.round(101 + (80 - 101) * t), Math.round(242 + (220 - 242) * t), 1];
+  const teal = [127, 231, 212, 1];
+  if (mark(x, y, { hw: 0.33, hh: 0.19, line: 0.03, iris: 0.115, pupil: 0.05 })) return teal;
+  const glow = Math.max(0, 1 - dist(x, y) / 0.17) * 0.22;
+  const base = [13 + 8 * y, 15 + 10 * y, 21 + 16 * y];
+  return [base[0] + (127 - base[0]) * glow, base[1] + (231 - base[1]) * glow, base[2] + (212 - base[2]) * glow, 1].map((v, k) => (k < 3 ? Math.round(v) : v));
 };
 
 writeFileSync('electron/assets/trayTemplate.png', png(16, tray));

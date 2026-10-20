@@ -17,16 +17,16 @@ export function SessionsPage() {
   return (
     <div>
       <h1>Sessions</h1>
-      <p className="muted small">Recordings on this machine, newest first.</p>
+      <p className="muted small" style={{ marginTop: 0 }}>Recordings on this machine, newest first.</p>
       {sessions.length === 0 && (
         <Empty title="No sessions yet">
-          Record one with <code>npm run spike:receive</code>, or import a Craig recording with <code>npm run import:craig</code>.
+          Start one from <a href={href('record')}>Record</a>, or import a Craig recording with <code>npm run import:craig</code>.
         </Empty>
       )}
       {sessions.map((s) => (
         <a key={s.id} className="card card-link" href={href('sessions', s.id)}>
           <div className="row spread">
-            <strong>{s.channelName ? `#${s.channelName}` : s.id}</strong>
+            <span className="display session-title">{s.channelName ? `#${s.channelName}` : s.id}</span>
             <span className="muted small">{when(s.startedAt)}</span>
           </div>
           <div className="muted small" style={{ margin: '4px 0 8px' }}>
@@ -39,7 +39,7 @@ export function SessionsPage() {
             {s.source === 'craig' && <Badge>Craig import</Badge>}
             <Badge tone={s.has.transcript ? 'good' : 'neutral'}>{s.has.transcript ? 'Transcript' : s.has.audio ? `${s.utterances} clips, not transcribed` : 'No audio'}</Badge>
             {s.has.speakerLabels && <Badge tone="accent">Speakers labelled</Badge>}
-            {s.has.summary && <Badge tone="good">Summary</Badge>}
+            {s.has.summary && <Badge tone="accent">Recap</Badge>}
           </div>
         </a>
       ))}

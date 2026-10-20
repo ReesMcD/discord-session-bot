@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api';
+import { href } from '../router';
 import type { Config, ConfigState, FieldError, Person } from '../types';
 import { PeopleSection } from './settings/PeopleSection';
 import { CampaignsSection } from './settings/CampaignsSection';
@@ -26,6 +27,14 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
   const [draft, setDraft] = useState<Config | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [section, setSection] = useState<Section>(SECTIONS.some((s) => s.key === initial) ? (initial as Section) : 'people');
+  // The URL picks the tab (the sidebar links straight to Campaigns), and a tab click updates the URL.
+  useEffect(() => {
+    if (SECTIONS.some((s) => s.key === initial)) setSection(initial as Section);
+  }, [initial]);
+  const openSection = (key: Section) => {
+    setSection(key);
+    window.location.hash = href('settings', key);
+  };
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
@@ -74,7 +83,7 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
       </p>
       <div className="tabs" role="tablist">
         {SECTIONS.map((s) => (
-          <button key={s.key} role="tab" aria-selected={section === s.key} className={section === s.key ? 'on' : ''} onClick={() => setSection(s.key)}>
+          <button key={s.key} role="tab" aria-selected={section === s.key} className={section === s.key ? 'on' : ''} onClick={() => openSection(s.key)}>
             {s.label}
           </button>
         ))}
