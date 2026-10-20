@@ -246,6 +246,27 @@ test('the recap can be edited: saved, generated copy kept, refused while it is b
   await jobs.idle();
 });
 
+test('saving from the app adds only the values that differ from the defaults', () => {
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const file = join(root, 'config.yaml');
+  writeFileSync(file, 'summary:\n  detail: medium # kept even though it is the default\n');
+  const store = new ConfigStore(file);
+  const full = structuredClone(store.read().config!); // what the Settings page sends: every value, defaults included
+  full.summary.detail = 'medium';
+  full.recording.silence_ms = 1500;
+  full.campaigns['111111111111111111'] = { characters: { '222222222222222222': 'Thorin' } };
+  assert.deepEqual(store.write(full).errors, []);
+  assert.equal(
+    readFileSync(file, 'utf8'),
+    'summary:\n  detail: medium # kept even though it is the default\nrecording:\n  silence_ms: 1500\ncampaigns:\n  "111111111111111111":\n    characters:\n      "222222222222222222": Thorin\n',
+  );
+  assert.equal(store.read().config!.summary.cleanup, true, 'defaults still apply');
+
+  const fresh = new ConfigStore(join(root, 'new.yaml'));
+  fresh.write(structuredClone(full));
+  assert.doesNotMatch(readFileSync(join(root, 'new.yaml'), 'utf8'), /include|cleanup|after_stop/);
+});
+
 test('replacing an inline list keeps its comment, above the key', () => {
   const root = mkdtempSync(join(tmpdir(), 'app-'));
   const file = join(root, 'config.yaml');

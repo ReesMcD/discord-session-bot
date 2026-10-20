@@ -392,11 +392,25 @@ function TranscriptionSection({ config, update, err }: SectionProps) {
   );
 }
 
+/** The defaults before the recap format; configs saved back then still carry them. */
+const OLD_MEETING_SECTIONS = ['Main topics discussed', 'Decisions made', 'Action items and who owns them', 'Open questions and unresolved issues'];
+const RECAP_SECTIONS = ['Loot, rewards and purchases', 'Quests, hooks and open threads'];
+
 function SummarySection({ config, update, err }: SectionProps) {
   const s = config.summary;
   const set = <K extends keyof Config['summary']>(k: K, v: Config['summary'][K]) => update((c) => void (c.summary[k] = v));
+  const oldSections = JSON.stringify(s.include) === JSON.stringify(OLD_MEETING_SECTIONS);
   return (
     <div>
+      {oldSections && (
+        <div className="card notice">
+          <strong>Your extra sections are the old meeting ones</strong>
+          <p className="small" style={{ margin: '6px 0 10px' }}>
+            "Main topics, Decisions, Action items, Open questions" were the defaults before the recap format, and would now be added after Combat in every recap.
+          </p>
+          <button onClick={() => set('include', [...RECAP_SECTIONS])}>Use loot and quests instead</button>
+        </div>
+      )}
       <div className="card">
         <p className="muted small" style={{ marginTop: 0 }}>
           The recap always has <strong>NPCs</strong>, <strong>Locations</strong>, <strong>What happened</strong> and <strong>Combat</strong> (with a kill count). The

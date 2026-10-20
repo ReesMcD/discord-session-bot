@@ -155,3 +155,6 @@ button.stop { width: 100%; margin-top: 16px; border-color: var(--bad); font-size
   flex: 1 1 200px;
   min-width: 0;
 }
+.card.notice {
+  border-color: var(--accent);
+}
