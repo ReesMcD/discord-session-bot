@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { SessionInfo } from '../session/layout.js';
 import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor } from './campaign.js';
+import { campaignFor } from '../config/campaign.js';
 import { chunkTranscript, formatLine, type Chunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { auditCleanup, type CleanupAuditReport, type Proposal } from './cleanupAudit.js';

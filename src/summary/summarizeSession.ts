@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { sharedAccounts, type Config } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor } from './campaign.js';
+import { campaignFor } from '../config/campaign.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { cleanTranscript, type CleanupResult } from './cleanup.js';

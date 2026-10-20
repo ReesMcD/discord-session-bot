@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { parseConfig } from '../src/config/load.js';
 import { PLACEHOLDERS, PROMPT_NAMES } from '../src/app/promptStore.js';
 import { paths, readJson, writeJson } from '../src/session/layout.js';
-import { campaignFor } from '../src/summary/campaign.js';
+import { campaignFor } from '../src/config/campaign.js';
 import { chunkTranscript, formatChunk } from '../src/summary/chunk.js';
 import { auditCleanup, similarity, type Proposal } from '../src/summary/cleanupAudit.js';
 import { contextBlock } from '../src/summary/context.js';

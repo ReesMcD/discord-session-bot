@@ -1,4 +1,4 @@
-import { parseIdentity, speakerNames, type Config, type Identity } from '../config/schema.js';
+import { parseIdentity, speakerNames, type Config, type Identity } from './schema.js';
 import type { SessionInfo } from '../session/layout.js';
 
 export interface Character extends Identity {

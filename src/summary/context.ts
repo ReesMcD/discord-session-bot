@@ -1,7 +1,7 @@
 import type { Config } from '../config/schema.js';
 import type { SessionInfo } from '../session/layout.js';
 import type { TranscriptLine } from '../transcript/merge.js';
-import { campaignFor, partyBlock } from './campaign.js';
+import { campaignFor, partyBlock } from '../config/campaign.js';
 
 /**
  * The "About this call" block every prompt starts with: date, channel, speakers, the campaign's
