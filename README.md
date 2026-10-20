@@ -413,7 +413,7 @@ data/sessions/<session-id>/
 | `recording.ignore_users` | `[]` | User IDs never recorded (music bots, etc.) |
 | `recording.ignore_bots` | `true` | Skip every bot account |
 | `recording.silence_ms` | `1000` | Silence that ends an utterance (also used to split Craig tracks) |
-| `recording.audio_retention_days` | `30` | How long to keep audio once processed (used once the full bot lands) |
+| `recording.audio_retention_days` | `30` | Delete a session's audio this many days after it stopped, once it's transcribed (`0` = keep forever). Checked when the app starts and daily; transcripts and recaps are kept |
 | `speakers` | `{}` | `userId: Name` for transcripts (otherwise the Discord display name), or `userId: {name, disambiguate: [...]}` for a [shared account](#e-shared-accounts-two-people-on-one-mic) |
 | `campaigns` | `{}` | `voiceChannelId: {name, context, characters: {userId: "Name — description"}}`; see [the recap](#d-write-the-session-recap) |
 | `transcription.provider` | `groq` | `groq` or `openai` |

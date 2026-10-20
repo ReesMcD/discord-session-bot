@@ -65,6 +65,7 @@ export interface SessionSummary {
   guildName?: string;
   source?: string;
   interrupted?: boolean;
+  audioDeletedAt?: number;
   speakers: string[];
   utterances: number;
   has: { audio: boolean; transcript: boolean; speakerLabels: boolean; summary: boolean };

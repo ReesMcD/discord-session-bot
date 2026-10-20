@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { createApi } from './api.js';
 import type { PasswordSource } from './auth.js';
 import { networkGuard } from './network.js';
+import { pruneOldAudio } from '../session/retention.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
@@ -48,6 +49,17 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   });
   opts.bot?.attachJobs(jobs, configStore);
 
+  // recording.audio_retention_days: on start, then daily.
+  const pruneAudio = () => {
+    const days = configStore.read().config?.recording.audio_retention_days;
+    if (days === undefined) return;
+    const pruned = pruneOldAudio(opts.dataDir, days);
+    if (pruned.length) log(`Deleted the audio of ${pruned.length} session(s) older than ${days} days (transcripts and recaps kept)`);
+  };
+  pruneAudio();
+  const pruneTimer = setInterval(pruneAudio, 86_400_000);
+  pruneTimer.unref();
+
   const app = new Hono();
   app.use('*', networkGuard(opts.allowLan ?? false));
   app.route(
@@ -87,7 +99,10 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
           url: `http://localhost:${info.port}`,
           jobs,
           configStore,
-          close: () => new Promise<void>((r) => server.close(() => r())),
+          close: () => {
+            clearInterval(pruneTimer);
+            return new Promise<void>((r) => server.close(() => r()));
+          },
         });
       });
       server.once('error', reject);

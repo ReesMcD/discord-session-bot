@@ -32,6 +32,8 @@ export interface SessionInfo {
   guildName?: string;
   channelId?: string;
   channelName?: string;
+  /** Set when the audio was deleted under recording.audio_retention_days (the text is kept). */
+  audioDeletedAt?: number;
 }
 
 export interface Participant {

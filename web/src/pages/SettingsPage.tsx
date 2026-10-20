@@ -232,7 +232,7 @@ function PeopleSection({ config, update, err, people }: SectionProps & { people:
           <Field label="End an utterance after (ms of silence)" error={err('recording.silence_ms')}>
             <NumberInput value={config.recording.silence_ms} min={200} max={10000} step={100} onChange={(v) => update((c) => void (c.recording.silence_ms = v))} />
           </Field>
-          <Field label="Keep audio for (days)" hint="0 = forever" error={err('recording.audio_retention_days')}>
+          <Field label="Keep audio for (days)" hint="Then the audio of transcribed sessions is deleted; transcripts and recaps stay. 0 = forever." error={err('recording.audio_retention_days')}>
             <NumberInput value={config.recording.audio_retention_days} min={0} onChange={(v) => update((c) => void (c.recording.audio_retention_days = v))} />
           </Field>
         </div>

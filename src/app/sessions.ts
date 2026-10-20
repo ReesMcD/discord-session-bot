@@ -27,6 +27,8 @@ export interface SessionSummary {
   source?: string;
   /** Closed by crash recovery rather than a normal stop. */
   interrupted?: boolean;
+  /** When the audio was deleted under recording.audio_retention_days. */
+  audioDeletedAt?: number;
   speakers: string[];
   utterances: number;
   has: { audio: boolean; transcript: boolean; speakerLabels: boolean; summary: boolean };
@@ -54,6 +56,7 @@ export function describeSession(dataDir: string, id: string): SessionSummary | u
     ...(info.guildName ? { guildName: info.guildName } : {}),
     ...(info.source ? { source: info.source } : {}),
     ...(info.interrupted ? { interrupted: true } : {}),
+    ...(info.audioDeletedAt ? { audioDeletedAt: info.audioDeletedAt } : {}),
     speakers,
     utterances: utterances.length,
     has: {

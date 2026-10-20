@@ -135,7 +135,7 @@ export function SessionPage({ id }: { id: string }) {
         (s.lines.length ? (
           <Transcript lines={s.lines} onDownload={() => downloadFile(s.id, 'transcript.md')} />
         ) : (
-          <Empty title="No transcript yet">{s.has.audio ? `${s.utterances} audio clips recorded. Press Transcribe above.` : 'This session has no audio.'}</Empty>
+          <Empty title="No transcript yet">{s.has.audio ? `${s.utterances} audio clips recorded. Press Transcribe above.` : s.audioDeletedAt ? `The audio was deleted on ${when(s.audioDeletedAt)}.` : 'This session has no audio.'}</Empty>
         ))}
     </div>
   );
