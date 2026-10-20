@@ -1,25 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { loadTemplate, render, type PromptName } from '../summary/prompts.js';
+import type { PromptInfo } from '../shared/types.js';
 
-export const PROMPT_NAMES: PromptName[] = ['extract', 'synthesize', 'disambiguate'];
+export type { PromptInfo };
+
+/** In pipeline order: speaker labels, clean-up, extraction, the recap, its audit and revision. */
+export const PROMPT_NAMES: PromptName[] = ['disambiguate', 'cleanup', 'extract', 'synthesize', 'audit', 'revise'];
 
 /** The placeholders the code fills in for each prompt; a custom template may only use these. */
 export const PLACEHOLDERS: Record<PromptName, string[]> = {
   extract: ['context', 'include_rules', 'exclude_rules'],
   synthesize: ['context', 'include_rules', 'exclude_rules', 'detail', 'detail_guidance', 'citation_guidance'],
   disambiguate: ['context', 'accounts'],
+  cleanup: ['context', 'vocabulary'],
+  audit: ['context', 'recap'],
+  revise: ['context', 'citation_guidance'],
 };
 
 /** Where app-edited prompts go when config.yaml doesn't name a folder (git-ignored). */
 export const DEFAULT_PROMPTS_DIR = 'prompts.local';
-
-export interface PromptInfo {
-  name: PromptName;
-  placeholders: string[];
-  builtIn: string;
-  custom: string | null;
-}
 
 export function readPrompts(promptsDir: string | undefined): PromptInfo[] {
   return PROMPT_NAMES.map((name) => {

@@ -10,6 +10,7 @@ import { createApi } from '../src/app/api.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner, type Job } from '../src/app/jobs.js';
 import { paths, writeJson } from '../src/session/layout.js';
+import { ReconnectBudget } from '../src/recording/reconnect.js';
 import { OggOpusWriter } from '../src/audio/OggOpusWriter.js';
 import { SILENCE_FRAME } from '../src/audio/opus.js';
 import { parseConfig } from '../src/config/load.js';
@@ -69,6 +70,25 @@ test('recovered recordings are queued for processing according to after_stop', a
   assert.deepEqual(steps, ['transcribe:crashed', 'summarize:crashed']);
   assert.deepEqual(bot.status(), { state: 'off', recording: null });
   await assert.rejects(bot.join('123456789012345678'), /not connected/);
+});
+
+test('when transcription fails, the queued recap is skipped with the reason instead of failing confusingly', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'rec-'));
+  const dataDir = join(root, 'data');
+  interruptedSession(dataDir, 'crashed');
+  const configPath = join(root, 'config.yaml');
+  writeFileSync(configPath, 'recording:\n  after_stop: summarize\n');
+  const ran: string[] = [];
+  const jobs = new JobRunner(async (job: Job) => {
+    ran.push(job.step);
+    if (job.step === 'transcribe') throw new Error('Groq rejected the API key');
+  });
+  new BotService({ dataDir, configPath, log: () => {} }).attachJobs(jobs, new ConfigStore(configPath));
+  await jobs.idle();
+  assert.deepEqual(ran, ['transcribe'], 'the recap step never ran');
+  const recap = jobs.list('crashed').find((j) => j.step === 'summarize')!;
+  assert.equal(recap.status, 'failed');
+  assert.equal(recap.error, 'Skipped: transcribe failed first (Groq rejected the API key)');
 });
 
 class FakeBot extends EventEmitter implements BotControl {
@@ -136,4 +156,17 @@ test('API without a bot reports it as off', async () => {
   assert.deepEqual(await res.json(), { state: 'off', recording: null });
   const join_ = await api.request('/bot/join', { method: 'POST', headers: { Authorization: 'Bearer pw-12345678' }, body: '{"channelId":"222222222222222222"}' });
   assert.equal(join_.status, 409);
+});
+
+test('reconnects: separate recovered drops never stop a recording; 10 failures in a row do', () => {
+  const long = new ReconnectBudget(10);
+  for (let drop = 0; drop < 50; drop++) {
+    assert.equal(long.attempt(), true, `drop ${drop + 1}`);
+    long.connected();
+  }
+  assert.equal(long.total, 50);
+
+  const dead = new ReconnectBudget(10);
+  for (let i = 0; i < 10; i++) assert.equal(dead.attempt(), true);
+  assert.equal(dead.attempt(), false, 'the 11th failure in a row gives up');
 });

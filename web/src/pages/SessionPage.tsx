@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, downloadFile, subscribeJobs } from '../api';
 import { duration, hms, speakerHue, when } from '../format';
-import { Markdown } from '../Markdown';
 import { href } from '../router';
 import type { Job, JobStep, SessionDetail, TranscriptLine } from '../types';
 import { Badge, Empty, Toggle } from '../ui';
+import { RecapCard } from './RecapCard';
 
 type Tab = 'transcript' | 'speakers' | 'summary';
 
@@ -12,7 +12,7 @@ const STEP_LABEL: Record<JobStep, string> = {
   transcribe: 'Transcribe',
   merge: 'Rebuild transcript',
   disambiguate: 'Label speakers',
-  summarize: 'Summarize',
+  summarize: 'Write recap',
 };
 
 export function SessionPage({ id }: { id: string }) {
@@ -45,6 +45,7 @@ export function SessionPage({ id }: { id: string }) {
   );
 
   const run = async (step: JobStep) => {
+    if (step === 'summarize' && s?.recapState === 'edited' && !confirm('Write a new recap? Your edited version is kept in the session folder (summary/edited-…md), but the new recap replaces it here.')) return;
     try {
       const job = await api<Job>(`/sessions/${encodeURIComponent(id)}/jobs`, { method: 'POST', json: { step, force } });
       setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)]);
@@ -89,14 +90,14 @@ export function SessionPage({ id }: { id: string }) {
                 {STEP_LABEL.disambiguate}
               </button>
               <button className={s.has.summary ? '' : 'primary'} disabled={!!active} onClick={() => run('summarize')}>
-                {STEP_LABEL.summarize}
+                {s.has.summary ? 'Rewrite recap' : STEP_LABEL.summarize}
               </button>
             </>
           )}
         </div>
         {s.has.transcript && (
           <div style={{ marginTop: 10 }}>
-            <Toggle checked={force} onChange={setForce} label="Redo from scratch" hint="Ignore saved results for labelling and summaries (costs API calls again)." />
+            <Toggle checked={force} onChange={setForce} label="Redo from scratch" hint="Ignore saved results for labelling, clean-up and the recap (costs API calls again)." />
           </div>
         )}
         {latest && (
@@ -116,27 +117,16 @@ export function SessionPage({ id }: { id: string }) {
           .filter((t) => t !== 'speakers' || hasSpeakers)
           .map((t) => (
             <button key={t} role="tab" aria-selected={current === t} className={current === t ? 'on' : ''} onClick={() => setTab(t)}>
-              {t === 'summary' ? 'Summary' : t === 'speakers' ? 'Speakers labelled' : 'Transcript'}
+              {t === 'summary' ? 'Recap' : t === 'speakers' ? 'Speakers labelled' : 'Transcript'}
             </button>
           ))}
       </div>
 
       {current === 'summary' &&
         (s.summary ? (
-          <div className="card">
-            <div className="row spread" style={{ marginBottom: 8 }}>
-              <span className="muted small">
-                {s.summaryMeta && `${s.summaryMeta.modelsUsed.join(', ') || s.summaryMeta.requestedModel} · ${s.summaryMeta.items} items`}
-                {s.summaryMeta?.speakerLabels && ` · ${s.summaryMeta.speakerLabels.labelled} lines relabelled`}
-              </span>
-              <button className="link" onClick={() => downloadFile(s.id, 'summary.md')}>
-                Download
-              </button>
-            </div>
-            <Markdown source={stripHeader(s.summary)} />
-          </div>
+          <RecapCard s={{ ...s, summary: s.summary }} busy={active?.step === 'summarize'} onSaved={(d) => (setS(d), setJobs(d.jobs))} />
         ) : (
-          <Empty title="No summary yet">{s.has.transcript ? 'Press Summarize above.' : 'Transcribe the session first.'}</Empty>
+          <Empty title="No recap yet">{s.has.transcript ? 'Press Write recap above.' : 'Transcribe the session first.'}</Empty>
         ))}
 
       {current === 'speakers' && s.speakerLines && <Transcript lines={s.speakerLines} onDownload={() => downloadFile(s.id, 'transcript.speakers.md')} />}
@@ -145,7 +135,7 @@ export function SessionPage({ id }: { id: string }) {
         (s.lines.length ? (
           <Transcript lines={s.lines} onDownload={() => downloadFile(s.id, 'transcript.md')} />
         ) : (
-          <Empty title="No transcript yet">{s.has.audio ? `${s.utterances} audio clips recorded. Press Transcribe above.` : 'This session has no audio.'}</Empty>
+          <Empty title="No transcript yet">{s.has.audio ? `${s.utterances} audio clips recorded. Press Transcribe above.` : s.audioDeletedAt ? `The audio was deleted on ${when(s.audioDeletedAt)}.` : 'This session has no audio.'}</Empty>
         ))}
     </div>
   );
@@ -202,11 +192,4 @@ function Transcript({ lines, onDownload }: { lines: TranscriptLine[]; onDownload
       </div>
     </div>
   );
-}
-
-/** summary.md starts with a title and a date/duration block the page already shows; drop it. */
-function stripHeader(md: string): string {
-  if (!md.startsWith('# ')) return md;
-  const rule = md.search(/^---\s*$/m);
-  return rule >= 0 ? md.slice(rule).replace(/^---\s*\n/, '') : md.replace(/^# .*\n/, '');
 }

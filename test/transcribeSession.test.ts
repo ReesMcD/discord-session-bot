@@ -52,7 +52,8 @@ test('transcribes a session end to end, caches batches, and merges a transcript'
   assert.equal(stats.batches, 2);
   assert.equal(stats.dropped, 2);
   assert.equal(fake.calls, 2);
-  assert.ok(existsSync(join(dir, 'transcription', 'batches', '111111111111111111-000.flac')));
+  assert.ok(existsSync(join(dir, 'transcription', 'raw', '111111111111111111-000.json')), 'API results are kept as the cache');
+  assert.equal(existsSync(join(dir, 'transcription', 'batches')), false, 'the FLAC upload copies are deleted');
 
   const again = await transcribeSession(dir, config.transcription, fake, () => {});
   assert.equal(again.batchesFromCache, 2);

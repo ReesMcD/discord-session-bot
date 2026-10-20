@@ -1,178 +1,200 @@
-import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sharedAccounts, type Config } from '../config/schema.js';
+import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
+import { formatOffset, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
+import { campaignFor } from './campaign.js';
+import { chunkTranscript, formatChunk } from './chunk.js';
+import { runChunkPass } from './chunkPass.js';
+import { cleanTranscript, type CleanupResult } from './cleanup.js';
+import type { CleanupAuditReport } from './cleanupAudit.js';
 import { contextBlock } from './context.js';
 import { disambiguateSession } from './disambiguate.js';
-import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
-import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
-import { mapLimit } from '../util/retry.js';
-import { chunkTranscript, formatChunk } from './chunk.js';
-import { loadTemplate, render } from './prompts.js';
 import type { Extraction, SummaryModel, Usage } from './model.js';
+import { loadTemplate, render } from './prompts.js';
+import { countNotes, formatNotes, insertKillCount, tallyKills } from './recap.js';
+import { auditRecap, type RecapAuditResult } from './recapAudit.js';
+import { recapPaths, writeGeneratedRecap } from './recapEdits.js';
+import type { SummaryMeta } from '../shared/types.js';
+
+export type { SummaryMeta };
 
 export const summaryPaths = {
   dir: (s: string) => join(s, 'summary'),
   extraction: (s: string, i: number) => join(s, 'summary', 'extract', `${String(i).padStart(3, '0')}.json`),
   meta: (s: string) => join(s, 'summary', 'meta.json'),
-  markdown: (s: string) => join(s, 'summary.md'),
+  cleanupAudit: (s: string) => join(s, 'summary', 'audit', 'cleanup.json'),
+  recapAudit: (s: string) => join(s, 'summary', 'audit', 'recap.json'),
+  markdown: recapPaths.markdown,
 };
 
-type Item = Extraction['items'][number];
-
-interface ExtractionCache {
-  key: string;
-  model: string;
-  items: Item[];
-  usage: Usage;
-}
-
 const DETAIL_GUIDANCE: Record<Config['summary']['detail'], string> = {
-  low: 'Keep it short: only the few points that matter most, at most three to five bullets per section, one line each. Someone should be able to read it in under a minute.',
+  low: 'Keep it short: only what matters most, one line per bullet, at most five bullets per section. Someone should be able to read it in under a minute.',
   medium: 'Cover every meaningful point, concisely: a bullet per distinct point, a sentence or two each. Merge minor related points. Aim for something readable in a few minutes.',
-  high: 'Be thorough: keep every relevant point, with the reasoning, numbers and who-said-what behind it. Use sub-bullets where it helps. Completeness matters more than brevity.',
+  high: 'Be thorough: keep every relevant point, with the specifics behind it. Use sub-bullets where it helps. Completeness matters more than brevity.',
 };
 
 function numbered(rules: readonly string[]): string {
-  return rules.map((r, i) => `${i + 1}. ${r}`).join('\n');
+  return rules.length ? rules.map((r, i) => `${i + 1}. ${r}`).join('\n') : '(none)';
 }
 
 function bullets(rules: readonly string[], none: string): string {
   return rules.length ? rules.map((r) => `- ${r}`).join('\n') : none;
 }
 
-function hash(...parts: string[]): string {
-  const h = createHash('sha256');
-  for (const p of parts) h.update(p).update('\0');
-  return h.digest('hex');
-}
-
-function toMs(time: string): number | undefined {
-  const m = /^(\d{1,2}):(\d{2}):(\d{2})$/.exec(time.trim());
-  return m ? (Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) * 1000 : undefined;
-}
-
-/** Groups extracted items by rule, in time order, as the input for the final write-up. */
-export function formatExtractions(items: readonly Item[], include: readonly string[]): string {
-  const sections: string[] = [];
-  include.forEach((rule, i) => {
-    const matching = items.filter((it) => it.rule === i + 1).sort((a, b) => (toMs(a.time) ?? 0) - (toMs(b.time) ?? 0));
-    if (!matching.length) return;
-    sections.push(`<rule number="${i + 1}" text="${rule.replace(/"/g, "'")}">\n${matching.map((it) => `[${it.time}] (${it.speakers.join(', ') || 'unknown'}) ${it.detail}`).join('\n')}\n</rule>`);
-  });
-  return sections.join('\n\n');
-}
+const add = (a: Usage, b: Usage) => {
+  a.inputTokens += b.inputTokens;
+  a.outputTokens += b.outputTokens;
+};
 
 export interface SummarizeOptions {
   concurrency?: number;
   log?: (msg: string) => void;
-  /** Ignore cached extractions. */
+  /** Ignore every cached step (speaker labels, clean-up, extraction, audit). */
   force?: boolean;
 }
 
-export interface SummaryMeta {
-  generatedAt: string;
-  requestedModel: string;
-  modelsUsed: string[];
-  promptVersions: Record<string, string>;
-  configHash: string;
-  detail: string;
-  chunks: number;
-  chunksFromCache: number;
-  items: number;
-  usage: { extract: Usage; synthesize: Usage; disambiguate?: Usage };
-  /** Present when shared accounts were relabelled before summarizing. */
-  speakerLabels?: { labelled: number; confident: number; guessed: number; unclear: number };
+/** One line on what a recap run did and cost, for the CLI and the app's job log. */
+export function describeRun(meta: SummaryMeta): string {
+  const n = meta.notes ?? { npcs: 0, locations: 0, events: 0, combats: 0, items: 0 };
+  const tokens = Object.entries(meta.usage)
+    .filter(([, u]) => u && (u.inputTokens || u.outputTokens))
+    .map(([step, u]) => `${step} ${u!.inputTokens}/${u!.outputTokens}`)
+    .join(', ');
+  return [
+    `${n.npcs} NPC, ${n.locations} location, ${n.events} event and ${n.combats} fight notes from ${meta.chunks} chunks (${meta.chunksFromCache} cached)`,
+    ...(meta.cleanup ? [`clean-up: ${meta.cleanup.edited} corrected, ${meta.cleanup.dropped} dropped${meta.cleanup.reverted ? `, ${meta.cleanup.reverted} reverted by the audit` : ''}`] : []),
+    ...(meta.recapAudit ? [`completeness check: ${meta.recapAudit.missing} missing item(s)${meta.recapAudit.applied === 'none' ? '' : ` ${meta.recapAudit.applied}`}`] : []),
+    ...(tokens ? [`tokens in/out: ${tokens}`] : []),
+  ].join(' · ');
 }
 
 /**
- * Two-pass summary of a session's transcript:
- *  1. extract: each ~20-minute chunk → items matching the include rules (cached per chunk)
- *  2. synthesize: all items → summary.md at the configured detail level
- * Re-running after changing only detail/citation settings reuses the extractions.
+ * The session recap, step by step (each step cached per chunk):
+ *  1. label speakers on shared accounts (only if configured)
+ *  2. clean-up: Claude fixes misheard words and drops filler (summary.cleanup),
+ *     then a deterministic audit reverts drastic changes (summary.cleanup_audit)
+ *  3. extract: NPCs, locations, events, fights and extra-rule items per ~20-minute chunk
+ *  4. synthesize: the recap in Markdown, plus a kill count tallied in code
+ *  5. audit: Claude checks each chunk against the recap and missing items are added (summary.recap_audit)
  */
 export async function summarizeSession(sessionDir: string, config: Config, configHash: string, model: SummaryModel, opts: SummarizeOptions = {}): Promise<{ file: string; meta: SummaryMeta }> {
   const log = opts.log ?? console.log;
   const s = config.summary;
+  const passOpts = { ...(opts.concurrency ? { concurrency: opts.concurrency } : {}), ...(opts.force ? { force: true } : {}), log };
   const data = readJson<{ session: SessionInfo; lines: TranscriptLine[] }>(paths.segments(sessionDir));
   if (!data) throw new Error(`No transcript in ${sessionDir}; run transcribe (or merge) first`);
   const { session } = data;
   let lines = data.lines;
   if (!lines.length) throw new Error('The transcript is empty; nothing to summarize');
-
-  // Optional: relabel lines on shared Discord accounts before summarizing (speakers.<id>.disambiguate).
   const used = new Set<string>();
+  const promptVersions: Record<string, string> = {};
+
+  // 1. Relabel lines on shared Discord accounts (speakers.<id>.disambiguate).
   let labelling: Awaited<ReturnType<typeof disambiguateSession>> | undefined;
   if ([...sharedAccounts(config).keys()].some((id) => lines.some((l) => l.userId === id))) {
-    labelling = await disambiguateSession(sessionDir, config, model, {
-      ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
-      ...(opts.force ? { force: true } : {}),
-      log,
-    });
+    labelling = await disambiguateSession(sessionDir, config, model, passOpts);
     lines = labelling.lines;
     for (const m of labelling.modelsUsed) used.add(m);
+    promptVersions.disambiguate = labelling.promptVersion;
     const st = labelling.stats;
     log(`  ${st.labelled} lines on shared accounts: ${st.confident} confident, ${st.guessed} guessed, ${st.unclear} unclear → ${labelling.file}`);
   }
 
-  const about = contextBlock(session, lines, s.context, config.transcript.timezone);
+  // 2. Clean-up, with its audit.
+  let cleanup: CleanupResult | undefined;
+  if (s.cleanup) {
+    cleanup = await cleanTranscript(lines, session, config, model, sessionDir, passOpts);
+    lines = cleanup.lines;
+    for (const m of cleanup.modelsUsed) used.add(m);
+    promptVersions.cleanup = cleanup.promptVersion;
+    writeJson(paths.cleanSegments(sessionDir), { session, lines, stats: cleanup.stats });
+    writeFileSync(paths.cleanTranscript(sessionDir), renderMarkdown(session, lines, config.transcript.timezone));
+    if (cleanup.audit) writeJson(summaryPaths.cleanupAudit(sessionDir), cleanup.audit satisfies CleanupAuditReport);
+    log(`  Cleaned up: ${cleanup.stats.edited} lines corrected, ${cleanup.stats.dropped} filler lines dropped`);
+    if (!lines.length) throw new Error('The clean-up dropped every line; turn off summary.cleanup and try again');
+  }
+
+  // 3. Extract notes per chunk.
+  const about = contextBlock(session, lines, config);
   const exclude = bullets(s.exclude, '- (no extra exclusions)');
   const extractT = loadTemplate('extract', s.prompts_dir);
   const synthT = loadTemplate('synthesize', s.prompts_dir);
+  promptVersions.extract = `${extractT.version}#${extractT.hash}`;
+  promptVersions.synthesize = `${synthT.version}#${synthT.hash}`;
   const extractSystem = render(extractT.text, { context: about, include_rules: numbered(s.include), exclude_rules: exclude });
 
   const chunks = chunkTranscript(lines, { chunkMs: s.chunk_minutes * 60_000, contextMs: 60_000, maxChars: 60_000 });
   log(`Extracting from ${chunks.length} chunk(s) with ${s.model}…`);
-
-  let fromCache = 0;
-  const extractUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-  const results = await mapLimit(chunks, opts.concurrency ?? 3, async (chunk) => {
-    const user = formatChunk(chunk, chunks.length);
-    const key = hash(s.model, s.extract_effort, extractSystem, user);
-    const cacheFile = summaryPaths.extraction(sessionDir, chunk.index);
-    const cached = opts.force ? undefined : readJson<ExtractionCache>(cacheFile);
-    if (cached?.key === key) {
-      fromCache++;
-      used.add(cached.model);
-      return cached.items;
-    }
-    const r = await model.extract({ model: s.model, effort: s.extract_effort, system: extractSystem, user });
-    const items = r.value.items.filter((it) => it.rule >= 1 && it.rule <= s.include.length && it.detail.trim());
-    writeJson(cacheFile, { key, model: r.model, items, usage: r.usage } satisfies ExtractionCache);
-    used.add(r.model);
-    extractUsage.inputTokens += r.usage.inputTokens;
-    extractUsage.outputTokens += r.usage.outputTokens;
-    log(`  chunk ${chunk.index + 1}/${chunks.length} (${formatOffset(chunk.startMs)}–${formatOffset(chunk.endMs)}): ${items.length} items`);
-    return items;
+  const extraction = await runChunkPass({
+    chunks,
+    model: s.model,
+    effort: s.extract_effort,
+    system: extractSystem,
+    user: (chunk) => formatChunk(chunk, chunks.length),
+    cacheFile: (chunk) => summaryPaths.extraction(sessionDir, chunk.index),
+    call: async (o) => {
+      const r = await model.extract(o);
+      // Items for a rule that doesn't exist are dropped before they're cached.
+      return { ...r, value: { ...r.value, items: r.value.items.filter((it) => it.rule >= 1 && it.rule <= s.include.length && it.detail.trim()) } };
+    },
+    onAnswer: (chunk, n) => {
+      const c = countNotes([n]);
+      log(`  chunk ${chunk.index + 1}/${chunks.length} (${formatOffset(chunk.startMs)}–${formatOffset(chunk.endMs)}): ${c.npcs} NPCs, ${c.locations} locations, ${c.events} events, ${c.combats} fights`);
+    },
+    ...(opts.force ? { force: true } : {}),
+    ...(opts.concurrency ? { concurrency: opts.concurrency } : {}),
   });
-  const items = results.flat();
+  const notes: Extraction[] = extraction.values;
+  for (const m of extraction.modelsUsed) used.add(m);
+  const extractUsage = extraction.usage;
+  const counts = countNotes(notes);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
+  // 4. Write the recap.
+  const citationGuidance = s.cite_timestamps
+    ? 'After each point, cite where it came from with its timestamp in square brackets, e.g. "[01:23:45]". Cite at most three timestamps per point; use the earliest relevant one when several notes were combined.'
+    : "Don't include timestamps.";
   const synthSystem = render(synthT.text, {
     context: about,
     include_rules: numbered(s.include),
     exclude_rules: exclude,
     detail: s.detail,
     detail_guidance: DETAIL_GUIDANCE[s.detail],
-    citation_guidance: s.cite_timestamps
-      ? 'After each point, cite where it came from with its timestamp in square brackets, e.g. "[01:23:45]". Cite at most three timestamps per point; use the earliest relevant one when several notes were combined.'
-      : "Don't include timestamps.",
+    citation_guidance: citationGuidance,
   });
   let body: string;
-  let synthUsage: Usage = { inputTokens: 0, outputTokens: 0 };
-  if (items.length === 0) {
-    body = '_Nothing in this call matched the summary rules._';
+  const synthUsage: Usage = { inputTokens: 0, outputTokens: 0 };
+  if (total === 0) {
+    body = '_Nothing in this session matched what the recap looks for._';
   } else {
-    log(`Writing summary from ${items.length} items…`);
-    const r = await model.synthesize({ model: s.model, effort: s.synthesize_effort, system: synthSystem, user: `<notes>\n${formatExtractions(items, s.include)}\n</notes>` });
+    log(`Writing the recap from ${total} notes…`);
+    const r = await model.synthesize({ model: s.model, effort: s.synthesize_effort, system: synthSystem, user: `<notes>\n${formatNotes(notes, s.include)}\n</notes>` });
     body = r.value;
-    synthUsage = r.usage;
+    add(synthUsage, r.usage);
     used.add(r.model);
   }
 
+  // 5. Completeness audit.
+  let audit: RecapAuditResult | undefined;
+  if (s.recap_audit && total > 0) {
+    audit = await auditRecap(body, lines, config, model, { ...passOpts, context: about, citationGuidance, sessionDir });
+    body = audit.body;
+    for (const m of audit.modelsUsed) used.add(m);
+    promptVersions.audit = audit.promptVersions.audit;
+    if (audit.applied === 'revised') promptVersions.revise = audit.promptVersions.revise;
+    writeJson(summaryPaths.recapAudit(sessionDir), { missing: audit.missing, applied: audit.applied });
+  }
+
+  // The kill count is tallied in code so it's exact, and added last so no rewrite can change it.
+  const kills = tallyKills(notes, campaignFor(config, session)?.characters);
+  body = insertKillCount(body, kills);
+
   const endMs = session.stoppedAt ?? lines.at(-1)!.endMs;
   const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', ...(config.transcript.timezone ? { timeZone: config.transcript.timezone } : {}) }).format(session.startedAt);
+  const campaign = campaignFor(config, session);
   const md = [
-    `# Summary: ${session.id}`,
+    `# Recap: ${campaign?.name ?? session.id}`,
     '',
     `- **Date:** ${date}`,
     `- **Duration:** ${formatOffset(endMs - session.startedAt)}`,
@@ -184,26 +206,33 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
     '',
   ].join('\n');
   const file = summaryPaths.markdown(sessionDir);
-  writeFileSync(file, md);
+  const editedBackup = writeGeneratedRecap(sessionDir, md);
+  if (editedBackup) log(`  Your edited recap was kept at ${editedBackup}`);
 
   const meta: SummaryMeta = {
     generatedAt: new Date().toISOString(),
     requestedModel: s.model,
     modelsUsed: [...used].sort(),
-    promptVersions: {
-      ...(labelling ? { disambiguate: labelling.promptVersion } : {}),
-      extract: `${extractT.version}#${extractT.hash}`,
-      synthesize: `${synthT.version}#${synthT.hash}`,
-    },
+    promptVersions,
     configHash,
     detail: s.detail,
     chunks: chunks.length,
-    chunksFromCache: fromCache,
-    items: items.length,
-    usage: { extract: extractUsage, synthesize: synthUsage, ...(labelling ? { disambiguate: labelling.usage } : {}) },
+    chunksFromCache: extraction.fromCache,
+    items: total,
+    notes: counts,
+    kills,
+    usage: {
+      extract: extractUsage,
+      synthesize: synthUsage,
+      ...(labelling ? { disambiguate: labelling.usage } : {}),
+      ...(cleanup ? { cleanup: cleanup.usage } : {}),
+      ...(audit ? { audit: audit.usage.audit, revise: audit.usage.revise } : {}),
+    },
     ...(labelling ? { speakerLabels: labelling.stats } : {}),
+    ...(cleanup ? { cleanup: { edited: cleanup.stats.edited, dropped: cleanup.stats.dropped, ...(cleanup.audit ? { reverted: cleanup.audit.reverted.length } : {}) } } : {}),
+    ...(audit ? { recapAudit: { missing: audit.missing.length, applied: audit.applied } } : {}),
+    ...(editedBackup ? { editedBackup } : {}),
   };
   writeJson(summaryPaths.meta(sessionDir), meta);
   return { file, meta };
 }
-

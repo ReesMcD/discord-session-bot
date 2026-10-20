@@ -62,6 +62,9 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
     auth.clear();
     throw new ApiError(401, { error: 'Wrong password' });
   }
+  if (res.status === 403 && !res.headers.get('content-type')?.includes('json')) {
+    throw new ApiError(403, { error: await res.text() });
+  }
   const text = await res.text();
   const body = text && res.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text;
   if (!res.ok) throw new ApiError(res.status, body);
@@ -89,6 +92,11 @@ function startStream(): () => void {
       controller = new AbortController();
       try {
         const res = await fetch(`${BASE}/events`, { headers: { Authorization: `Bearer ${password}` }, signal: controller.signal });
+        // A rejected password won't start working by retrying (and retries count as wrong guesses).
+        if (res.status === 401 || res.status === 403) {
+          if (res.status === 401) auth.clear();
+          return;
+        }
         if (!res.ok || !res.body) throw new Error(`events ${res.status}`);
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buf = '';

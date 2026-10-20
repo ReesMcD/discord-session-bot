@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Config } from '../config/schema.js';
 import { oggOpusDurationSec } from '../audio/oggReader.js';
@@ -102,6 +102,9 @@ export async function transcribeSession(
     t.segments.push(...remapToUtterances({ words: result.words, segments: keep }, plan.clips));
     perUser.set(plan.userId, t);
   }
+
+  // The FLAC uploads are a copy of the audio; the cache lives in transcription/raw.
+  rmSync(paths.batchesDir(sessionDir), { recursive: true, force: true });
 
   let segments = 0;
   let dropped = 0;

@@ -27,6 +27,7 @@ const server = await startServer({
   configPath,
   webDist: process.env.WEB_DIST ?? 'web/dist',
   corsOrigins: (process.env.APP_CORS_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  allowLan: /^(1|true|yes)$/i.test(process.env.APP_ALLOW_LAN ?? ''),
   bot,
 });
 console.log(`Session bot app on ${server.url}`);

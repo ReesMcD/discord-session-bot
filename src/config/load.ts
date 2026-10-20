@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
-import { configSchema, type Config } from './schema.js';
+import { configSchema, explainKeyErrors, type Config } from './schema.js';
 
 export class ConfigError extends Error {
   override name = 'ConfigError';
@@ -30,7 +30,7 @@ export function parseConfig(text: string, source = 'config'): Omit<LoadedConfig,
     throw new ConfigError(`${source}: invalid YAML: ${(err as Error).message}`);
   }
   const result = configSchema.safeParse(raw);
-  if (!result.success) throw new ConfigError(`${source} is invalid:\n${z.prettifyError(result.error)}`);
+  if (!result.success) throw new ConfigError(`${source} is invalid:\n${z.prettifyError(explainKeyErrors(result.error))}`);
   const config = result.data;
   if (config.transcript.timezone) {
     try {

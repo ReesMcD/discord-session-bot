@@ -5,6 +5,9 @@ import { serve, type ServerType } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { createApi } from './api.js';
+import type { PasswordSource } from './auth.js';
+import { networkGuard } from './network.js';
+import { pruneOldAudio } from '../session/retention.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
@@ -12,7 +15,8 @@ import { PROVIDERS } from '../transcription/openaiCompatible.js';
 import type { BotService } from '../bot/BotService.js';
 
 export interface ServerOptions {
-  password: string;
+  /** Pass a function when the password can change while the server runs. */
+  password: PasswordSource;
   port?: number;
   host?: string;
   dataDir: string;
@@ -20,6 +24,8 @@ export interface ServerOptions {
   /** Folder with the built web UI (index.html). */
   webDist: string;
   corsOrigins?: string[];
+  /** Answer devices on the local network too, not just this Mac and Tailscale. */
+  allowLan?: boolean;
   /** The Discord bot, when it runs in this process. */
   bot?: BotService;
   log?: (msg: string) => void;
@@ -43,7 +49,19 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   });
   opts.bot?.attachJobs(jobs, configStore);
 
+  // recording.audio_retention_days: on start, then daily.
+  const pruneAudio = () => {
+    const days = configStore.read().config?.recording.audio_retention_days;
+    if (days === undefined) return;
+    const pruned = pruneOldAudio(opts.dataDir, days);
+    if (pruned.length) log(`Deleted the audio of ${pruned.length} session(s) older than ${days} days (transcripts and recaps kept)`);
+  };
+  pruneAudio();
+  const pruneTimer = setInterval(pruneAudio, 86_400_000);
+  pruneTimer.unref();
+
   const app = new Hono();
+  app.use('*', networkGuard(opts.allowLan ?? false));
   app.route(
     '/api',
     createApi({
@@ -81,7 +99,10 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
           url: `http://localhost:${info.port}`,
           jobs,
           configStore,
-          close: () => new Promise<void>((r) => server.close(() => r())),
+          close: () => {
+            clearInterval(pruneTimer);
+            return new Promise<void>((r) => server.close(() => r()));
+          },
         });
       });
       server.once('error', reject);

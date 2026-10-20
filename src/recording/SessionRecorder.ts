@@ -6,6 +6,7 @@ import type { Guild, VoiceBasedChannel } from 'discord.js';
 import { paths, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { RecordingStatus } from '../bot/types.js';
 import { skipReason, type RecordFilterConfig } from './filters.js';
+import { ReconnectBudget } from './reconnect.js';
 import { UtteranceRecorder, type UtteranceRecord } from './UtteranceRecorder.js';
 
 export interface SessionRecorderOptions {
@@ -16,6 +17,10 @@ export interface SessionRecorderOptions {
   filter: RecordFilterConfig;
   silenceMs: number;
   log?: (msg: string) => void;
+  /** Receives the voice connection's debug lines (DAVE, encryption); turns them on when set. */
+  debug?: (msg: string) => void;
+  /** Written to session.json; "bot" sessions are recovered by the app after a crash. */
+  source?: string;
 }
 
 interface ParticipantState {
@@ -28,8 +33,9 @@ interface ParticipantState {
 /**
  * One recording: joins a voice channel, records each allowed speaker's utterances to
  * audio/<userId>/<startMs>.ogg, keeps session.json / participants.json / utterances.jsonl up to
- * date (so a crash loses at most the utterance in progress), reconnects on drops, and emits
- * "update" whenever its status changes.
+ * date (so a crash loses at most the utterance in progress), and reconnects on drops.
+ * Events: "update" (status changed), "utterance" (UtteranceRecord), "resubscribe" (userId, error),
+ * "lost" (gave up reconnecting).
  */
 export class SessionRecorder extends EventEmitter {
   readonly startedAt = Date.now();
@@ -40,7 +46,7 @@ export class SessionRecorder extends EventEmitter {
   private readonly skipped = new Map<string, { name: string; reason: string }>();
   private readonly active = new Map<string, Promise<void>>();
   private readonly resolving = new Set<string>();
-  private reconnects = 0;
+  private readonly reconnects = new ReconnectBudget();
   private stopping = false;
   private readonly info: SessionInfo & { source: string };
   private readonly log: (msg: string) => void;
@@ -55,7 +61,7 @@ export class SessionRecorder extends EventEmitter {
       guildName: opts.guild.name,
       channelId: opts.channel.id,
       channelName: opts.channel.name,
-      source: 'bot',
+      source: opts.source ?? 'bot',
     };
   }
 
@@ -70,7 +76,7 @@ export class SessionRecorder extends EventEmitter {
       state: this.state,
       participants: [...this.participants].map(([id, p]) => ({ id, ...p })),
       skipped: [...this.skipped].map(([id, s]) => ({ id, ...s })),
-      reconnects: this.reconnects,
+      reconnects: this.reconnects.total,
     };
   }
 
@@ -84,6 +90,7 @@ export class SessionRecorder extends EventEmitter {
       adapterCreator: guild.voiceAdapterCreator,
       selfDeaf: false,
       selfMute: true,
+      debug: !!this.opts.debug,
     });
     this.connection = connection;
     this.wire(connection);
@@ -117,9 +124,14 @@ export class SessionRecorder extends EventEmitter {
 
   private wire(connection: VoiceConnection): void {
     connection.on('error', (err) => this.log(`voice connection error: ${err.message}`));
+    if (this.opts.debug) connection.on('debug', this.opts.debug);
     connection.on('stateChange', async (oldState, newState) => {
       if (oldState.status === newState.status || this.stopping) return;
-      if (newState.status === VoiceConnectionStatus.Ready) this.setState('recording');
+      this.log(`voice connection: ${oldState.status} → ${newState.status}`);
+      if (newState.status === VoiceConnectionStatus.Ready) {
+        this.reconnects.connected();
+        this.setState('recording');
+      }
       if (newState.status !== VoiceConnectionStatus.Disconnected) return;
       this.setState('reconnecting');
       try {
@@ -128,9 +140,9 @@ export class SessionRecorder extends EventEmitter {
           entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
         ]);
       } catch {
-        this.reconnects++;
-        this.log(`voice disconnected; rejoining (attempt ${this.reconnects})`);
-        if (this.reconnects > 10 || !connection.rejoin()) {
+        const keepTrying = this.reconnects.attempt();
+        this.log(`voice disconnected; rejoining (reconnect ${this.reconnects.total})`);
+        if (!keepTrying || !connection.rejoin()) {
           this.log('giving up on reconnecting');
           this.emit('lost');
         }
@@ -188,7 +200,8 @@ export class SessionRecorder extends EventEmitter {
       // A decrypt error (e.g. during a DAVE key change) can end the stream while the person is still
       // talking; "speaking start" won't fire again until they pause, so resubscribe now.
       if (rec?.error && !this.stopping && connection.receiver.speaking.users.has(userId)) {
-        this.log(`resubscribing ${userId} after stream error: ${rec.error}`);
+        this.log(`resubscribing ${this.participants.get(userId)?.name ?? userId} after stream error: ${rec.error}`);
+        this.emit('resubscribe', userId, rec.error);
         this.record(connection, userId);
       }
     });
@@ -197,6 +210,7 @@ export class SessionRecorder extends EventEmitter {
 
   private onUtterance(rec: UtteranceRecord): void {
     appendFileSync(join(this.opts.sessionDir, 'utterances.jsonl'), JSON.stringify(rec) + '\n');
+    this.emit('utterance', rec);
     const p = this.participants.get(rec.userId);
     if (p) {
       p.utterances++;

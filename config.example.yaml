@@ -18,12 +18,22 @@ speakers: {}
 #  "223456789012345678": Sam
 #
 #  An account several people share (or one person voicing several roles): list who talks on it and
-#  Claude labels each line before summarizing. The text before " — " is the name used in transcripts.
+#  Claude labels each line before writing the recap. The text before " — " is the name used in transcripts.
 #  "323456789012345678":
 #    name: Rees
 #    disambiguate:
 #      - "DM — narrates the world and voices NPCs"
 #      - "Hamqueef — a player character"
+
+# Campaigns, by the voice channel they're played in: who plays which character, so the recap can
+# tell party members from NPCs and credit kills. Craig imports use the campaign if there's only one.
+campaigns: {}
+#  "345678901234567890":            # voice channel ID
+#    name: Curse of Strahd           # the recap's title
+#    context: Gothic horror in Barovia. The party is level 5.
+#    characters:                     # Discord user ID → "Name — description"
+#      "123456789012345678": DM
+#      "223456789012345678": "Thorin — dwarf fighter"
 
 transcription:
   provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)
@@ -41,25 +51,29 @@ transcript:
   max_line_seconds: 60
   # timezone: America/New_York   # defaults to the machine's time zone
 
+# The session recap: NPCs, Locations, What happened, Combat (with a kill count), then the extra
+# sections listed under include.
 summary:
   model: claude-opus-5        # any Claude model ID; claude-sonnet-5 is cheaper
   # low = a few highlights · medium = organised notes · high = thorough, nothing relevant left out
   detail: medium
   cite_timestamps: true       # "[01:23:45]" after each point
-  # What the summary captures. Each rule becomes a section, in this order.
+  # Extra sections after Combat, in this order.
   include:
-    - Main topics discussed
-    - Decisions made
-    - Action items and who owns them
-    - Open questions and unresolved issues
-  # Dropped even if they match an include rule.
+    - Loot, rewards and purchases
+    - Quests, hooks and open threads
+  # Left out even if they match.
   exclude: []
-  #  - Small talk and off-topic banter
-  # Background Claude should know about these calls.
+  #  - Rules arguments and out-of-game chat
+  # Background Claude should know about every game (per-campaign background goes under campaigns).
   # context: |
-  #   Weekly D&D campaign. Rees is the DM; the others are players (Sam plays Thorin).
+  #   Weekly D&D game. Rees is the DM.
+  # Steps: raw transcript → clean-up → audit → recap → audit.
+  cleanup: true               # Claude fixes misheard names and drops filler first
+  cleanup_audit: true         # reverts clean-up edits that changed too much (no API calls)
+  recap_audit: true           # Claude checks the recap against the transcript and adds what it missed
   chunk_minutes: 20           # transcript is read in pieces this long
   extract_effort: medium      # low | medium | high | xhigh | max
   synthesize_effort: high
   fallbacks: true             # if Claude declines a request, retry it on Anthropic's recommended fallback model
-  # prompts_dir: ./my-prompts # extract.md / synthesize.md here override the built-in prompts
+  # prompts_dir: ./my-prompts # cleanup.md, extract.md, synthesize.md, audit.md, revise.md here override the built-ins

@@ -8,7 +8,8 @@ import { parseConfig } from '../src/config/load.js';
 import { parseIdentity, sharedAccounts, speakerNames } from '../src/config/schema.js';
 import { paths, writeJson } from '../src/session/layout.js';
 import { disambiguateLines, disambiguateSession } from '../src/summary/disambiguate.js';
-import { AnthropicSummaryModel, type CallOptions, type Labels, type SummaryModel } from '../src/summary/model.js';
+import { AnthropicSummaryModel, type Labels } from '../src/summary/model.js';
+import { FakeModel } from './helpers/fakeModel.js';
 import { summarizeSession, summaryPaths } from '../src/summary/summarizeSession.js';
 import { mergeSegments, type TranscriptLine } from '../src/transcript/merge.js';
 
@@ -51,21 +52,8 @@ const LINES = [
 ];
 
 /** Labels by line number: 1 = DM, 2 = Hamqueef. */
-class FakeLabeller implements SummaryModel {
-  calls: CallOptions[] = [];
-  constructor(private readonly labels: Labels['labels']) {}
-  async disambiguate(opts: CallOptions) {
-    this.calls.push(opts);
-    return { value: { labels: this.labels }, model: 'claude-test', usage: { inputTokens: 500, outputTokens: 40 } };
-  }
-  async extract(opts: CallOptions) {
-    this.extractCalls.push(opts);
-    return { value: { items: [] }, model: 'claude-test', usage: { inputTokens: 1, outputTokens: 1 } };
-  }
-  extractCalls: CallOptions[] = [];
-  async synthesize() {
-    return { value: 'unused', model: 'claude-test', usage: { inputTokens: 1, outputTokens: 1 } };
-  }
+function labeller(labels: Labels['labels']): FakeModel {
+  return new FakeModel({ disambiguate: () => ({ labels }) });
 }
 
 test('config: shared speakers accept identities; plain names still work; labels come from the hint', () => {
@@ -96,7 +84,7 @@ test('merge keeps shared-account lines separate so each can be relabelled', () =
 test('relabels shared-account lines, tags guesses and unclear lines, leaves everyone else alone', async () => {
   const { config } = parseConfig(CONFIG);
   const dir = mkdtempSync(join(tmpdir(), 'dis-'));
-  const model = new FakeLabeller([
+  const model = labeller([
     { line: 1, speaker: 1, confident: true },
     { line: 3, speaker: 1, confident: true },
     { line: 4, speaker: 2, confident: true },
@@ -106,11 +94,11 @@ test('relabels shared-account lines, tags guesses and unclear lines, leaves ever
   ]);
   const r = await disambiguateLines(LINES, config, model, dir, { id: 's', startedAt: T0 }, { log: () => {} });
 
-  assert.equal(model.calls.length, 1);
-  const user = model.calls[0]!.user;
+  assert.equal(model.calls.disambiguate.length, 1);
+  const user = model.calls.disambiguate[0]!.user;
   assert.match(user, /#1 \[00:00:01\] Rees: You enter/);
   assert.match(user, /\n\[00:00:05\] Sam: I ask/, 'other speakers are context, not numbered');
-  const sys = model.calls[0]!.system;
+  const sys = model.calls.disambiguate[0]!.system;
   assert.match(sys, /Account "Rees":\n  1\. DM — narrates the world and NPCs\n  2\. Hamqueef — a player character/);
   assert.match(sys, /Weekly D&D game\./);
 
@@ -134,17 +122,17 @@ test('a label pointing at another account, or a missing label, becomes unclear',
   const { config } = parseConfig(`${CONFIG}\n  "${MUSIC}":\n    name: Duo\n    disambiguate: ["A — one", "B — two"]`.replace('summary:\n  context: "Weekly D&D game."\n', '') + '\n');
   const lines = [line(1, REES, 'Rees', 'x'), line(2, MUSIC, 'Duo', 'y'), line(3, REES, 'Rees', 'z')];
   // Identities: Rees → 1 DM, 2 Hamqueef; Duo → 3 A, 4 B.
-  const model = new FakeLabeller([{ line: 1, speaker: 3, confident: true }, { line: 2, speaker: 4, confident: true }]);
+  const model = labeller([{ line: 1, speaker: 3, confident: true }, { line: 2, speaker: 4, confident: true }]);
   const r = await disambiguateLines(lines, config, model, mkdtempSync(join(tmpdir(), 'dis-')), { id: 's', startedAt: T0 }, { log: () => {} });
   assert.deepEqual(r.lines.map((l) => [l.speaker, l.inferred?.confidence]), [['Rees', 'unclear'], ['B', 'high'], ['Rees', 'unclear']]);
 });
 
 test('no shared accounts in the session → no model call, lines unchanged', async () => {
   const { config } = parseConfig(CONFIG);
-  const model = new FakeLabeller([]);
+  const model = labeller([]);
   const lines = LINES.filter((l) => l.userId === SAM);
   const r = await disambiguateLines(lines, config, model, mkdtempSync(join(tmpdir(), 'dis-')), { id: 's', startedAt: T0 }, { log: () => {} });
-  assert.equal(model.calls.length, 0);
+  assert.equal(model.calls.disambiguate.length, 0);
   assert.deepEqual(r.lines, lines);
 });
 
@@ -152,7 +140,7 @@ test('session: writes transcript.speakers.md, caches labels, and feeds relabelle
   const { config } = parseConfig(CONFIG);
   const dir = mkdtempSync(join(tmpdir(), 'dis-'));
   writeJson(paths.segments(dir), { session: { id: 'game', startedAt: T0 }, lines: LINES });
-  const model = new FakeLabeller([
+  const model = labeller([
     { line: 1, speaker: 1, confident: true },
     { line: 3, speaker: 1, confident: true },
     { line: 4, speaker: 2, confident: true },
@@ -172,11 +160,11 @@ test('session: writes transcript.speakers.md, caches labels, and feeds relabelle
 
   // summarize runs the pass (from cache) and summarizes the relabelled lines.
   const { meta } = await summarizeSession(dir, config, 'h', model, { log: () => {} });
-  assert.equal(model.calls.length, 1, 'labels reused from cache');
+  assert.equal(model.calls.disambiguate.length, 1, 'labels reused from cache');
   assert.deepEqual(meta.speakerLabels, { labelled: 5, confident: 3, guessed: 1, unclear: 1 });
   assert.match(meta.promptVersions.disambiguate!, /^v1#/);
-  assert.match(model.extractCalls[0]!.user, /\[00:00:13\] Hamqueef: Hamqueef slams/);
-  assert.match(model.extractCalls[0]!.user, /\[00:00:25\] Rees \(unclear\): Mystery line\./);
+  assert.match(model.calls.extract[0]!.user, /\[00:00:13\] Hamqueef: Hamqueef slams/);
+  assert.match(model.calls.extract[0]!.user, /\[00:00:25\] Rees \(unclear\): Mystery line\./);
   assert.ok(existsSync(summaryPaths.markdown(dir)));
 });
 

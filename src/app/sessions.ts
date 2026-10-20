@@ -2,7 +2,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { listUtterances, paths, readJson, readParticipants, readSessionInfo, type Participant, type SessionInfo } from '../session/layout.js';
 import type { TranscriptLine } from '../transcript/merge.js';
+import { readEditState, recapState, type RecapState } from '../summary/recapEdits.js';
 import { summaryPaths, type SummaryMeta } from '../summary/summarizeSession.js';
+import type { Person, SessionDetail, SessionSummary } from '../shared/types.js';
+
+export type { Person, SessionDetail, SessionSummary };
 
 const SESSION_ID = /^[\w.-]+$/;
 
@@ -15,20 +19,6 @@ export function sessionDirFor(dataDir: string, id: string): string | undefined {
   if (!SESSION_ID.test(id) || id === '.' || id === '..') return undefined;
   const dir = join(sessionsRoot(dataDir), id);
   return existsSync(dir) && statSync(dir).isDirectory() ? dir : undefined;
-}
-
-export interface SessionSummary {
-  id: string;
-  startedAt: number;
-  stoppedAt?: number;
-  channelName?: string;
-  guildName?: string;
-  source?: string;
-  /** Closed by crash recovery rather than a normal stop. */
-  interrupted?: boolean;
-  speakers: string[];
-  utterances: number;
-  has: { audio: boolean; transcript: boolean; speakerLabels: boolean; summary: boolean };
 }
 
 function segmentsOf(dir: string, file: string): { session?: SessionInfo; lines: TranscriptLine[] } {
@@ -53,6 +43,7 @@ export function describeSession(dataDir: string, id: string): SessionSummary | u
     ...(info.guildName ? { guildName: info.guildName } : {}),
     ...(info.source ? { source: info.source } : {}),
     ...(info.interrupted ? { interrupted: true } : {}),
+    ...(info.audioDeletedAt ? { audioDeletedAt: info.audioDeletedAt } : {}),
     speakers,
     utterances: utterances.length,
     has: {
@@ -73,14 +64,6 @@ export function listSessions(dataDir: string): SessionSummary[] {
     .sort((a, b) => b.startedAt - a.startedAt);
 }
 
-export interface SessionDetail extends SessionSummary {
-  participants: Record<string, Participant>;
-  lines: TranscriptLine[];
-  speakerLines: TranscriptLine[] | null;
-  summary: string | null;
-  summaryMeta: SummaryMeta | null;
-}
-
 export function sessionDetail(dataDir: string, id: string): SessionDetail | undefined {
   const base = describeSession(dataDir, id);
   const dir = sessionDirFor(dataDir, id);
@@ -93,14 +76,9 @@ export function sessionDetail(dataDir: string, id: string): SessionDetail | unde
     speakerLines: existsSync(paths.disambiguatedSegments(dir)) ? segmentsOf(dir, paths.disambiguatedSegments(dir)).lines : null,
     summary: existsSync(summaryFile) ? readFileSync(summaryFile, 'utf8') : null,
     summaryMeta: readJson<SummaryMeta>(summaryPaths.meta(dir)) ?? null,
+    recapState: recapState(dir),
+    editedAt: readEditState(dir)?.editedAt ?? null,
   };
-}
-
-export interface Person {
-  id: string;
-  names: string[];
-  sessions: number;
-  lastSeen: number;
 }
 
 /** Everyone seen in any session (from participants.json), for picking people by name in Settings. */
@@ -127,5 +105,6 @@ export function knownPeople(dataDir: string): Person[] {
 export const SESSION_FILES = {
   'transcript.md': (dir: string) => paths.transcript(dir),
   'transcript.speakers.md': (dir: string) => paths.disambiguatedTranscript(dir),
+  'transcript.clean.md': (dir: string) => paths.cleanTranscript(dir),
   'summary.md': (dir: string) => summaryPaths.markdown(dir),
 } as const;

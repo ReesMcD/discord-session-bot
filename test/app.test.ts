@@ -4,6 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApi } from '../src/app/api.js';
+import { SignInLimiter } from '../src/app/auth.js';
+import { isLocalOrTailscale } from '../src/app/network.js';
+import { startServer } from '../src/app/startServer.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner } from '../src/app/jobs.js';
 import { pipelineRunner } from '../src/app/steps.js';
@@ -43,6 +46,45 @@ test('every route needs the password', async () => {
   const ok = await req('/health');
   assert.equal(ok.status, 200);
   assert.deepEqual(await ok.json(), { ok: true, keys: { anthropic: false } });
+});
+
+test('a changed password applies at once: the old one stops working, the new one works', async () => {
+  let current = 'first password 1';
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const api = createApi({ password: () => current, dataDir: root, configStore: new ConfigStore(join(root, 'c.yaml')), jobs: new JobRunner(async () => {}) });
+  const health = async (p: string) => (await api.request('/health', { headers: { Authorization: `Bearer ${p}` } })).status;
+  assert.equal(await health('first password 1'), 200);
+  current = 'second password 2';
+  assert.equal(await health('first password 1'), 401);
+  assert.equal(await health('second password 2'), 200);
+});
+
+test('wrong passwords are throttled per client; a right one still works afterwards', async () => {
+  let now = 0;
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const api = createApi({ password: PASSWORD, dataDir: root, configStore: new ConfigStore(join(root, 'c.yaml')), jobs: new JobRunner(async () => {}), signInLimiter: new SignInLimiter(3, 60_000, () => now) });
+  const status = async (p: string) => (await api.request('/health', { headers: { Authorization: `Bearer ${p}` } })).status;
+  for (let i = 0; i < 3; i++) assert.equal(await status('guess'), 401);
+  const blocked = await api.request('/health', { headers: { Authorization: `Bearer ${PASSWORD}` } });
+  assert.equal(blocked.status, 429, 'even the right password waits while blocked');
+  assert.equal(blocked.headers.get('Retry-After'), '60');
+  now += 60_001;
+  assert.equal(await status(PASSWORD), 200);
+  assert.equal(await status('guess'), 401, 'a success clears the count');
+});
+
+test('only this Mac and Tailscale addresses are let in by default', async () => {
+  for (const a of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '100.64.0.1', '100.101.102.103', '100.127.255.255', 'fd7a:115c:a1e0::1']) assert.ok(isLocalOrTailscale(a), a);
+  for (const a of ['192.168.1.20', '10.0.0.5', '::ffff:192.168.1.20', '100.63.0.1', '100.128.0.1', 'fe80::1', '2001:db8::1']) assert.ok(!isLocalOrTailscale(a), a);
+
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const server = await startServer({ password: PASSWORD, port: 0, host: '127.0.0.1', dataDir: root, configPath: join(root, 'c.yaml'), webDist: join(root, 'none'), log: () => {} });
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/health`, { headers: { Authorization: `Bearer ${PASSWORD}` } });
+    assert.equal(res.status, 200, 'loopback is allowed through the real server');
+  } finally {
+    await server.close();
+  }
 });
 
 test('lists sessions and rejects path tricks', async () => {
@@ -144,8 +186,8 @@ test('prompts: custom versions are validated, saved to a folder config points at
   try {
     const list = (await (await req('/prompts')).json()) as { dir: null; prompts: { name: string; custom: null; builtIn: string }[] };
     assert.equal(list.dir, null);
-    assert.deepEqual(list.prompts.map((p) => p.name), ['extract', 'synthesize', 'disambiguate']);
-    assert.match(list.prompts[0]!.builtIn, /\{\{include_rules\}\}/);
+    assert.deepEqual(list.prompts.map((p) => p.name), ['disambiguate', 'cleanup', 'extract', 'synthesize', 'audit', 'revise']);
+    assert.match(list.prompts.find((p) => p.name === 'extract')!.builtIn, /\{\{include_rules\}\}/);
 
     const bad = await req('/prompts/extract', { method: 'PUT', body: JSON.stringify({ text: 'Use {{typo}}' }) });
     assert.equal(bad.status, 400);
@@ -156,8 +198,8 @@ test('prompts: custom versions are validated, saved to a folder config points at
     assert.match(readFileSync(configPath, 'utf8'), /prompts_dir: prompts\.local/);
     assert.ok(existsSync(join(root, 'prompts.local', 'extract.md')));
 
-    const after = (await (await req('/prompts/extract', { method: 'DELETE' })).json()) as { prompts: { custom: string | null }[] };
-    assert.equal(after.prompts[0]!.custom, null);
+    const after = (await (await req('/prompts/extract', { method: 'DELETE' })).json()) as { prompts: { name: string; custom: string | null }[] };
+    assert.equal(after.prompts.find((p) => p.name === 'extract')!.custom, null);
   } finally {
     process.chdir(cwd);
   }
@@ -173,6 +215,56 @@ test('people from past sessions, and file downloads', async () => {
   assert.equal(file.status, 200);
   assert.match(await file.text(), /Rees: Hello table\./);
   assert.equal((await req('/sessions/game-1/files/..%2Fsecret')).status, 404);
+});
+
+test('the recap can be edited: saved, generated copy kept, refused while it is being regenerated', async () => {
+  const { req, dir, jobs } = setup();
+  const put = (markdown: unknown) => req('/sessions/game-1/summary', { method: 'PUT', body: JSON.stringify({ markdown }) });
+  assert.equal((await put('# Recap')).status, 400, 'no recap yet');
+  writeFileSync(join(dir, 'summary.md'), '# Recap: game-1\n\n## NPCs\n\n- Strahd\n');
+
+  assert.equal((await put(42)).status, 400);
+  const res = await put('# Recap: game-1\n\n## NPCs\n\n- Strahd\n- Ireena\n');
+  assert.equal(res.status, 200);
+  const detail = (await res.json()) as { summary: string; recapState: string; editedAt: string };
+  assert.equal(detail.recapState, 'edited');
+  assert.match(detail.summary, /- Ireena/);
+  assert.ok(detail.editedAt);
+  assert.match(readFileSync(join(dir, 'summary', 'generated.md'), 'utf8'), /- Strahd\n$/);
+  assert.equal((await req('/sessions/nope/summary', { method: 'PUT', body: '{}' })).status, 404);
+
+  // While a summarize job is queued or running, edits are refused (it would overwrite them).
+  let release!: () => void;
+  const blocked = new Promise<void>((r) => (release = r));
+  const busy = new JobRunner(async () => blocked);
+  const api = createApi({ password: PASSWORD, dataDir: join(dir, '..', '..'), configStore: new ConfigStore(join(dir, 'none.yaml')), jobs: busy });
+  busy.enqueue('game-1', 'summarize');
+  const refused = await api.request('/sessions/game-1/summary', { method: 'PUT', headers: { Authorization: `Bearer ${PASSWORD}` }, body: JSON.stringify({ markdown: 'x' }) });
+  assert.equal(refused.status, 409);
+  release();
+  await busy.idle();
+  await jobs.idle();
+});
+
+test('saving from the app adds only the values that differ from the defaults', () => {
+  const root = mkdtempSync(join(tmpdir(), 'app-'));
+  const file = join(root, 'config.yaml');
+  writeFileSync(file, 'summary:\n  detail: medium # kept even though it is the default\n');
+  const store = new ConfigStore(file);
+  const full = structuredClone(store.read().config!); // what the Settings page sends: every value, defaults included
+  full.summary.detail = 'medium';
+  full.recording.silence_ms = 1500;
+  full.campaigns['111111111111111111'] = { characters: { '222222222222222222': 'Thorin' } };
+  assert.deepEqual(store.write(full).errors, []);
+  assert.equal(
+    readFileSync(file, 'utf8'),
+    'summary:\n  detail: medium # kept even though it is the default\nrecording:\n  silence_ms: 1500\ncampaigns:\n  "111111111111111111":\n    characters:\n      "222222222222222222": Thorin\n',
+  );
+  assert.equal(store.read().config!.summary.cleanup, true, 'defaults still apply');
+
+  const fresh = new ConfigStore(join(root, 'new.yaml'));
+  fresh.write(structuredClone(full));
+  assert.doesNotMatch(readFileSync(join(root, 'new.yaml'), 'utf8'), /include|cleanup|after_stop/);
 });
 
 test('replacing an inline list keeps its comment, above the key', () => {

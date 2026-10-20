@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { Participant, SessionInfo } from '../shared/types.js';
 
 /**
  * The on-disk session folder is the contract between phases (recording → transcription →
@@ -19,22 +20,12 @@ export const paths = {
   /** Same as segments.json / transcript.md, with shared accounts relabelled per speaker. */
   disambiguatedSegments: (dir: string) => join(dir, 'segments.speakers.json'),
   disambiguatedTranscript: (dir: string) => join(dir, 'transcript.speakers.md'),
+  /** Same again after Claude's clean-up pass (misheard words fixed, filler dropped). */
+  cleanSegments: (dir: string) => join(dir, 'segments.clean.json'),
+  cleanTranscript: (dir: string) => join(dir, 'transcript.clean.md'),
 };
 
-export interface SessionInfo {
-  id: string;
-  startedAt: number;
-  stoppedAt?: number;
-  guildId?: string;
-  guildName?: string;
-  channelId?: string;
-  channelName?: string;
-}
-
-export interface Participant {
-  displayName: string;
-  username?: string;
-}
+export type { Participant, SessionInfo } from '../shared/types.js';
 
 export interface UtteranceFile {
   userId: string;
