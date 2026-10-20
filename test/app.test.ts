@@ -254,13 +254,20 @@ test('saving from the app adds only the values that differ from the defaults', (
   const full = structuredClone(store.read().config!); // what the Settings page sends: every value, defaults included
   full.summary.detail = 'medium';
   full.recording.silence_ms = 1500;
-  full.campaigns['111111111111111111'] = { characters: { '222222222222222222': 'Thorin' } };
+  full.campaigns['111111111111111111'] = { characters: { '222222222222222222': 'Thorin' }, guests: [] };
   assert.deepEqual(store.write(full).errors, []);
   assert.equal(
     readFileSync(file, 'utf8'),
     'summary:\n  detail: medium # kept even though it is the default\nrecording:\n  silence_ms: 1500\ncampaigns:\n  "111111111111111111":\n    characters:\n      "222222222222222222": Thorin\n',
   );
   assert.equal(store.read().config!.summary.cleanup, true, 'defaults still apply');
+
+  // A new, still-empty campaign is kept; an existing one doesn't gain its default guests: [].
+  const next = structuredClone(store.read().config!);
+  next.campaigns['333333333333333333'] = { characters: {}, guests: [] };
+  store.write(next);
+  assert.match(readFileSync(file, 'utf8'), /\n  "333333333333333333": \{\}\n/);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /guests/);
 
   const fresh = new ConfigStore(join(root, 'new.yaml'));
   fresh.write(structuredClone(full));

@@ -7,7 +7,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { parseConfig } from '../src/config/load.js';
 import { PLACEHOLDERS, PROMPT_NAMES } from '../src/app/promptStore.js';
 import { paths, readJson, writeJson } from '../src/session/layout.js';
-import { campaignFor } from '../src/config/campaign.js';
+import { campaignFor, parseCharacter } from '../src/config/campaign.js';
+import { parseDndBeyondId } from '../web/src/dndbeyond.js';
 import { chunkTranscript, formatChunk } from '../src/summary/chunk.js';
 import { auditCleanup, similarity, type Proposal } from '../src/summary/cleanupAudit.js';
 import { contextBlock } from '../src/summary/context.js';
@@ -77,6 +78,35 @@ test('campaign: matched by voice channel, the only campaign for sessions without
   const two = parseConfig(`${CAMPAIGN}  "444444444444444444":\n    name: Other\n`).config;
   assert.equal(campaignFor(two, {}), undefined, 'ambiguous with two campaigns');
   assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "nope": Thorin\n`), /"nope" must be a Discord ID \(15–22 digits\)\n  → at campaigns\.111111111111111111\.characters\.nope/);
+});
+
+test('roster: characters in either form, a D&D Beyond ID, and guests', () => {
+  const { config } = parseConfig(`campaigns:
+  "${CHANNEL}":
+    dndbeyond: 4567890
+    characters:
+      "${SAM}": { name: Thorin, description: dwarf fighter 5, dndbeyond: 98765432 }
+      "${ALEX}": "Elara — elf wizard"
+    guests: ["444444444444444444"]
+`);
+  const c = campaignFor(config, { channelId: CHANNEL })!;
+  assert.equal(c.dndbeyond, 4567890);
+  assert.deepEqual(c.guests, ['444444444444444444']);
+  assert.deepEqual(c.characters[0], { userId: SAM, label: 'Thorin', description: 'Thorin — dwarf fighter 5', dndbeyond: 98765432 });
+  assert.deepEqual(c.characters[1], { userId: ALEX, label: 'Elara', description: 'Elara — elf wizard' });
+  assert.deepEqual(parseCharacter(SAM, { name: 'DM' }), { userId: SAM, label: 'DM', description: 'DM' });
+  assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "${SAM}": { name: Thorin, class: fighter }\n`), /class/);
+
+  assert.equal(parseDndBeyondId('https://www.dndbeyond.com/characters/98765432'), 98765432);
+  assert.equal(parseDndBeyondId('https://www.dndbeyond.com/campaigns/4567890?x=1'), 4567890);
+  assert.equal(parseDndBeyondId(' 123 '), 123);
+  assert.equal(parseDndBeyondId('https://www.dndbeyond.com/characters/'), undefined);
+});
+
+test('the party block names players by their real name, falling back to the Discord name', () => {
+  const { config } = parseConfig(`${CAMPAIGN}speakers:\n  "${SAM}": Samantha\n`);
+  const block = contextBlock({ id: 's', startedAt: T0, channelId: CHANNEL }, [line(0, 'Thorin', 'hi', SAM), line(1, 'alex_d', 'yo', ALEX)], config);
+  assert.match(block, /- Thorin — dwarf fighter \(played by Samantha\)\n- Elara — elf wizard \(played by alex_d\)/);
 });
 
 test('the prompt context lists the party, who plays whom, and the campaign background', () => {

@@ -292,9 +292,11 @@ How it's made, step by step (each step is saved, so re-runs only redo what chang
 Each step can be turned off under **Settings → Recap**. Claude steps cost another pass over the
 transcript each (see [Costs](#costs)).
 
-**Campaigns:** list who plays which character per voice channel (**Settings → Campaigns**, or
-`campaigns:` in `config.yaml`). The recap then knows party members aren't NPCs and can credit
-kills to characters. A Craig import uses the campaign if there's only one.
+**Campaigns:** set each voice channel's roster once in **Settings → Campaigns**: every person's
+real name, their character (and a short description like "dwarf fighter 5"), their D&D Beyond
+sheet, plus any guests who talk but don't play. It's saved in the app, so you never set it up
+again. The recap then knows party members aren't NPCs and credits kills to characters. A Craig
+import uses the campaign if there's only one.
 
 **Editing:** on the session's **Recap** tab you can **Copy** the Markdown, add a note to any
 section, or **Edit** the whole thing (with a preview). The first edit keeps the generated version
@@ -415,7 +417,7 @@ data/sessions/<session-id>/
 | `recording.silence_ms` | `1000` | Silence that ends an utterance (also used to split Craig tracks) |
 | `recording.audio_retention_days` | `30` | Delete a session's audio this many days after it stopped, once it's transcribed (`0` = keep forever). Checked when the app starts and daily; transcripts and recaps are kept |
 | `speakers` | `{}` | `userId: Name` for transcripts (otherwise the Discord display name), or `userId: {name, disambiguate: [...]}` for a [shared account](#e-shared-accounts-two-people-on-one-mic) |
-| `campaigns` | `{}` | `voiceChannelId: {name, context, characters: {userId: "Name — description"}}`; see [the recap](#d-write-the-session-recap) |
+| `campaigns` | `{}` | `voiceChannelId: {name, context, dndbeyond, characters: {userId: {name, description, dndbeyond}}, guests: [userId]}`; a character can also be a `"Name — description"` string. See [the recap](#d-write-the-session-recap) |
 | `transcription.provider` | `groq` | `groq` or `openai` |
 | `transcription.model` | per provider | Groq: `whisper-large-v3-turbo`; OpenAI: `whisper-1` |
 | `transcription.base_url` | per provider | Any OpenAI-compatible transcription server |

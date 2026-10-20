@@ -64,17 +64,35 @@ export class ConfigStore {
   }
 }
 
+/** The defaults of each entry in a map keyed by ID (e.g. a campaign's `guests: []`). */
+class EntryDefaults {
+  constructor(readonly entry: unknown) {}
+}
+
+const SAMPLE_ID = '100000000000000000';
+
 /** Every setting at its default, to tell which values the user actually chose. */
-const DEFAULTS = configSchema.parse({}) as unknown as Record<string, unknown>;
+const DEFAULTS: Record<string, unknown> = {
+  ...(configSchema.parse({}) as unknown as Record<string, unknown>),
+  campaigns: new EntryDefaults(configSchema.parse({ campaigns: { [SAMPLE_ID]: {} } }).campaigns[SAMPLE_ID]),
+};
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const defaultOf = (defaults: unknown, key: string): unknown =>
+  defaults instanceof EntryDefaults ? defaults.entry : isPlainObject(defaults) ? defaults[key] : undefined;
 
 /**
  * `value` without the parts equal to `defaults` (undefined if nothing is left), so saving from the
- * app doesn't pin defaults into the file and later default changes still apply.
+ * app doesn't pin defaults into the file and later default changes still apply. An entry of an
+ * ID-keyed map is kept even when all its values are defaults (a campaign you just added).
  */
 function withoutDefaults(value: unknown, defaults: unknown): unknown {
+  if (defaults instanceof EntryDefaults) {
+    if (!isPlainObject(value)) return value;
+    const entries = Object.entries(value).map(([k, v]) => [k, withoutDefaults(v, defaults.entry) ?? {}] as const);
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
   if (sameValue(value, defaults)) return undefined;
   if (!isPlainObject(value) || !isPlainObject(defaults)) return value;
   const out: Record<string, unknown> = {};
@@ -113,14 +131,13 @@ function sameScalar(node: unknown, value: unknown): boolean {
  * file are always updated; missing keys are only added where they differ from the default.
  */
 function apply(doc: Document, map: YAMLMap, value: Record<string, unknown>, defaults: unknown): void {
-  const defaultOf = (key: string) => (isPlainObject(defaults) ? defaults[key] : undefined);
   for (const item of [...map.items]) {
     if (!(keyString(item.key) in value)) map.delete(item.key);
   }
   for (const [key, v] of Object.entries(value)) {
     const item = map.items.find((i) => keyString(i.key) === key);
     if (item && isMap(item.value) && v && typeof v === 'object' && !Array.isArray(v)) {
-      apply(doc, item.value, v as Record<string, unknown>, defaultOf(key));
+      apply(doc, item.value, v as Record<string, unknown>, defaultOf(defaults, key));
     } else if (item && sameScalar(item.value, v)) {
       // unchanged: keep the node (and its comment) as is
     } else if (item) {
@@ -135,7 +152,7 @@ function apply(doc: Document, map: YAMLMap, value: Record<string, unknown>, defa
       if (old?.commentBefore) node.commentBefore = old.commentBefore;
       item.value = node;
     } else {
-      const chosen = withoutDefaults(v, defaultOf(key));
+      const chosen = withoutDefaults(v, defaultOf(defaults, key)) ?? (defaults instanceof EntryDefaults ? {} : undefined);
       if (chosen !== undefined) map.add(doc.createPair(key, chosen));
     }
   }

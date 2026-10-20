@@ -3,13 +3,29 @@ import type { SessionInfo } from '../session/layout.js';
 
 export interface Character extends Identity {
   userId: string;
+  dndbeyond?: number;
 }
 
 export interface Campaign {
   channelId: string;
   name?: string;
   context?: string;
+  dndbeyond?: number;
   characters: Character[];
+  guests: string[];
+}
+
+type CharacterEntry = Config['campaigns'][string]['characters'][string];
+
+/** Either way of writing a character, as a name (`label`) and the full hint (`description`). */
+export function parseCharacter(userId: string, entry: CharacterEntry): Character {
+  if (typeof entry === 'string') return { userId, ...parseIdentity(entry) };
+  return {
+    userId,
+    label: entry.name,
+    description: entry.description ? `${entry.name} — ${entry.description}` : entry.name,
+    ...(entry.dndbeyond ? { dndbeyond: entry.dndbeyond } : {}),
+  };
 }
 
 /**
@@ -25,16 +41,18 @@ export function campaignFor(config: Pick<Config, 'campaigns'>, session: Pick<Ses
     channelId,
     ...(c.name ? { name: c.name } : {}),
     ...(c.context ? { context: c.context } : {}),
-    characters: Object.entries(c.characters).map(([userId, text]) => ({ userId, ...parseIdentity(text) })),
+    ...(c.dndbeyond ? { dndbeyond: c.dndbeyond } : {}),
+    characters: Object.entries(c.characters).map(([userId, entry]) => parseCharacter(userId, entry)),
+    guests: c.guests,
   };
 }
 
-/** "- Thorin — dwarf fighter (played by Sam)" per character, naming players as the transcript does. */
-export function partyBlock(campaign: Campaign, config: Pick<Config, 'speakers'>, spokenNames: ReadonlyMap<string, string>): string {
-  const aliases = speakerNames(config);
+/** "- Thorin — dwarf fighter (played by Sam)" per character: the real name, else the Discord name. */
+export function partyBlock(campaign: Campaign, config: Pick<Config, 'speakers'>, discordNames: ReadonlyMap<string, string>): string {
+  const realNames = speakerNames(config);
   return campaign.characters
     .map((c) => {
-      const player = spokenNames.get(c.userId) ?? aliases[c.userId];
+      const player = realNames[c.userId] ?? discordNames.get(c.userId);
       return `- ${c.description}${player ? ` (played by ${player})` : ''}`;
     })
     .join('\n');

@@ -25,15 +25,18 @@ speakers: {}
 #      - "DM — narrates the world and voices NPCs"
 #      - "Hamqueef — a player character"
 
-# Campaigns, by the voice channel they're played in: who plays which character, so the recap can
-# tell party members from NPCs and credit kills. Craig imports use the campaign if there's only one.
+# Campaigns, by the voice channel they're played in: who plays which character, so transcripts show
+# character names and the recap can tell the party from NPCs. Easiest to fill in from the app
+# (Settings → Campaigns). Real names come from speakers above. Craig imports use the only campaign.
 campaigns: {}
 #  "345678901234567890":            # voice channel ID
 #    name: Curse of Strahd           # the recap's title
 #    context: Gothic horror in Barovia. The party is level 5.
-#    characters:                     # Discord user ID → "Name — description"
-#      "123456789012345678": DM
-#      "223456789012345678": "Thorin — dwarf fighter"
+#    dndbeyond: 4567890              # optional: the D&D Beyond campaign ID (from its URL)
+#    characters:                     # Discord user ID → their character
+#      "123456789012345678": { name: DM }
+#      "223456789012345678": { name: Thorin, description: dwarf fighter 5, dndbeyond: 98765432 }
+#    guests: []                      # people who talk at the table but don't play"
 
 transcription:
   provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)
