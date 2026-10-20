@@ -93,6 +93,7 @@ export interface Job {
   finishedAt?: number;
   logs: string[];
   error?: string;
+  after?: string;
 }
 
 export interface SummaryMeta {

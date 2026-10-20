@@ -72,6 +72,25 @@ test('recovered recordings are queued for processing according to after_stop', a
   await assert.rejects(bot.join('123456789012345678'), /not connected/);
 });
 
+test('when transcription fails, the queued recap is skipped with the reason instead of failing confusingly', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'rec-'));
+  const dataDir = join(root, 'data');
+  interruptedSession(dataDir, 'crashed');
+  const configPath = join(root, 'config.yaml');
+  writeFileSync(configPath, 'recording:\n  after_stop: summarize\n');
+  const ran: string[] = [];
+  const jobs = new JobRunner(async (job: Job) => {
+    ran.push(job.step);
+    if (job.step === 'transcribe') throw new Error('Groq rejected the API key');
+  });
+  new BotService({ dataDir, configPath, log: () => {} }).attachJobs(jobs, new ConfigStore(configPath));
+  await jobs.idle();
+  assert.deepEqual(ran, ['transcribe'], 'the recap step never ran');
+  const recap = jobs.list('crashed').find((j) => j.step === 'summarize')!;
+  assert.equal(recap.status, 'failed');
+  assert.equal(recap.error, 'Skipped: transcribe failed first (Groq rejected the API key)');
+});
+
 class FakeBot extends EventEmitter implements BotControl {
   recording: RecordingStatus | null = null;
   status(): BotStatus {

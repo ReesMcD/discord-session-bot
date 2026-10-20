@@ -15,6 +15,8 @@ export interface Job {
   finishedAt?: number;
   logs: string[];
   error?: string;
+  /** Runs only if this earlier job succeeded (e.g. the recap after transcription). */
+  after?: string;
 }
 
 export type StepRunner = (job: Job, log: (msg: string) => void) => Promise<void>;
@@ -35,10 +37,10 @@ export class JobRunner extends EventEmitter {
     super();
   }
 
-  enqueue(sessionId: string, step: JobStep, force = false): Job {
+  enqueue(sessionId: string, step: JobStep, force = false, opts: { after?: Job } = {}): Job {
     const existing = [...this.jobs.values()].find((j) => j.sessionId === sessionId && j.step === step && (j.status === 'queued' || j.status === 'running'));
     if (existing) return existing;
-    const job: Job = { id: randomUUID(), sessionId, step, force, status: 'queued', createdAt: Date.now(), logs: [] };
+    const job: Job = { id: randomUUID(), sessionId, step, force, status: 'queued', createdAt: Date.now(), logs: [], ...(opts.after ? { after: opts.after.id } : {}) };
     this.jobs.set(job.id, job);
     this.queue.push(job);
     this.prune();
@@ -72,7 +74,10 @@ export class JobRunner extends EventEmitter {
           for (const line of msg.split('\n')) job.logs.push(line);
           this.emit('job', job);
         };
+        // Jobs run in order, so a dependency has finished by now.
+        const dependency = job.after ? this.jobs.get(job.after) : undefined;
         try {
+          if (dependency?.status === 'failed') throw new Error(`Skipped: ${dependency.step} failed first (${dependency.error ?? 'see its log'})`);
           await this.run(job, log);
           job.status = 'done';
         } catch (err) {

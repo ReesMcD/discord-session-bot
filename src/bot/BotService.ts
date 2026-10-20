@@ -193,8 +193,8 @@ export class BotService extends EventEmitter implements BotControl {
     const config = this.configStore.read().config;
     const mode = config?.recording.after_stop ?? 'transcribe';
     if (mode === 'nothing') return;
-    this.jobs.enqueue(sessionId, 'transcribe');
-    if (mode === 'summarize') this.jobs.enqueue(sessionId, 'summarize');
+    const transcribe = this.jobs.enqueue(sessionId, 'transcribe');
+    if (mode === 'summarize') this.jobs.enqueue(sessionId, 'summarize', false, { after: transcribe });
   }
 
   private setState(state: BotStatus['state']): void {
