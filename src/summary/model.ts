@@ -2,18 +2,58 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 
+const time = z.string().describe('Timestamp copied from the transcript, HH:MM:SS');
+
+const named = z.object({
+  name: z.string().describe('The name as best understood, correcting obvious mis-transcriptions'),
+  time,
+  details: z.array(z.string()).describe('What was learned about them or what happened with them in this section, one point each'),
+});
+
+/** What the extraction pass pulls from each chunk; the recap is written from these. */
 export const extractionSchema = z.object({
+  npcs: z.array(named),
+  locations: z.array(named),
+  events: z.array(z.object({ time, text: z.string() })),
+  combats: z.array(
+    z.object({
+      start: time,
+      end: time,
+      opponents: z.array(z.string()),
+      summary: z.string().describe('One to three sentences: who fought, how it went, how it ended'),
+      deaths: z.array(z.string()).describe('Anyone who died or was killed, on either side'),
+      kills: z.array(z.object({ by: z.string().describe('Character who landed the killing blow'), target: z.string() })),
+    }),
+  ),
   items: z.array(
     z.object({
-      time: z.string().describe('Timestamp copied from the transcript, HH:MM:SS'),
-      rule: z.number().int().describe('Number of the include rule this matches'),
-      speakers: z.array(z.string()),
+      time,
+      rule: z.number().int().describe('Number of the extra rule this matches'),
       detail: z.string(),
     }),
   ),
 });
 
 export type Extraction = z.infer<typeof extractionSchema>;
+
+export const cleanupSchema = z.object({
+  edits: z.array(z.object({ line: z.number().int().describe('The #N number of the line'), text: z.string().describe('The corrected text of the whole line') })),
+  drops: z.array(z.number().int()).describe('#N numbers of lines that are pure filler'),
+});
+
+export type Cleanup = z.infer<typeof cleanupSchema>;
+
+export const auditSchema = z.object({
+  missing: z.array(
+    z.object({
+      section: z.enum(['npcs', 'locations', 'events', 'combat', 'other']),
+      time,
+      detail: z.string().describe('What the recap is missing, written so it can be added as is'),
+    }),
+  ),
+});
+
+export type AuditFindings = z.infer<typeof auditSchema>;
 
 export const labelSchema = z.object({
   labels: z.array(
@@ -51,7 +91,12 @@ export interface CallOptions {
 export interface SummaryModel {
   /** Labels which identity speaks each numbered line of a shared account. */
   disambiguate(opts: CallOptions): Promise<CallResult<Labels>>;
+  /** Corrects misheard words and marks filler lines in a chunk of the transcript. */
+  cleanup(opts: CallOptions): Promise<CallResult<Cleanup>>;
   extract(opts: CallOptions): Promise<CallResult<Extraction>>;
+  /** Lists what a chunk of the transcript has that the recap is missing. */
+  audit(opts: CallOptions): Promise<CallResult<AuditFindings>>;
+  /** Writes Markdown: the recap, or a revision of it. */
   synthesize(opts: CallOptions): Promise<CallResult<string>>;
 }
 
@@ -113,6 +158,14 @@ export class AnthropicSummaryModel implements SummaryModel {
     return this.parse(opts, labelSchema, 'speaker-labelling');
   }
 
+  cleanup(opts: CallOptions): Promise<CallResult<Cleanup>> {
+    return this.parse(opts, cleanupSchema, 'clean-up');
+  }
+
+  audit(opts: CallOptions): Promise<CallResult<AuditFindings>> {
+    return this.parse(opts, auditSchema, 'recap audit');
+  }
+
   async synthesize(opts: CallOptions): Promise<CallResult<string>> {
     // Streamed: long outputs at high effort can exceed non-streaming HTTP timeouts.
     const msg = await this.client.beta.messages
@@ -125,13 +178,13 @@ export class AnthropicSummaryModel implements SummaryModel {
         ...this.fallbackParams(),
       })
       .finalMessage();
-    checkStop(msg, 'summary');
+    checkStop(msg, 'recap');
     const text = msg.content
       .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
       .map((b) => b.text)
       .join('')
       .trim();
-    if (!text) throw new SummaryError('Summary step returned no text');
+    if (!text) throw new SummaryError('The recap step returned no text');
     return { value: text, model: msg.model, usage: usageOf(msg.usage) };
   }
 }

@@ -19,6 +19,9 @@ export const paths = {
   /** Same as segments.json / transcript.md, with shared accounts relabelled per speaker. */
   disambiguatedSegments: (dir: string) => join(dir, 'segments.speakers.json'),
   disambiguatedTranscript: (dir: string) => join(dir, 'transcript.speakers.md'),
+  /** Same again after Claude's clean-up pass (misheard words fixed, filler dropped). */
+  cleanSegments: (dir: string) => join(dir, 'segments.clean.json'),
+  cleanTranscript: (dir: string) => join(dir, 'transcript.clean.md'),
 };
 
 export interface SessionInfo {

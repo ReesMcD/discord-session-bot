@@ -102,7 +102,7 @@ export async function disambiguateLines(
 
   const names = new Map<string, string>();
   for (const l of lines) if (accounts.has(l.userId) && !names.has(l.userId)) names.set(l.userId, l.speaker);
-  const context = contextBlock(session, lines, config.summary.context, config.transcript.timezone);
+  const context = contextBlock(session, lines, config);
   const system = render(template.text, { context, accounts: accountsBlock(accounts, names) });
 
   const ids = new Map<TranscriptLine, number>();

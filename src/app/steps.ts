@@ -5,7 +5,7 @@ import type { Transcriber } from '../transcription/types.js';
 import { mergeSession } from '../transcript/merge.js';
 import { AnthropicSummaryModel, type SummaryModel } from '../summary/model.js';
 import { disambiguateSession } from '../summary/disambiguate.js';
-import { summarizeSession } from '../summary/summarizeSession.js';
+import { describeRun, summarizeSession } from '../summary/summarizeSession.js';
 import { sharedAccounts, type Config } from '../config/schema.js';
 import type { StepRunner } from './jobs.js';
 import { sessionDirFor } from './sessions.js';
@@ -54,8 +54,7 @@ export function pipelineRunner(deps: StepDeps): StepRunner {
       }
       case 'summarize': {
         const { meta } = await summarizeSession(dir, config, hash, makeModel(config), { force: job.force, log });
-        const u = meta.usage;
-        log(`Summary written: ${meta.items} items from ${meta.chunks} chunks; tokens in/out extract ${u.extract.inputTokens}/${u.extract.outputTokens}, summary ${u.synthesize.inputTokens}/${u.synthesize.outputTokens}`);
+        log(`Recap written: ${describeRun(meta)}`);
         return;
       }
     }

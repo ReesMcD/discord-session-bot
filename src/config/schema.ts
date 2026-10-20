@@ -16,6 +16,19 @@ const sharedSpeaker = z
   })
   .strict();
 
+const campaign = z
+  .object({
+    name: z.string().min(1).optional(),
+    /** Background for this campaign, added to the prompts after summary.context. */
+    context: z.string().optional(),
+    /**
+     * Discord user ID → the character they play, e.g. "Thorin — dwarf fighter" (or "DM"). The text
+     * before " — ", " – ", " - " or ":" is the character's name; the rest is a hint for Claude.
+     */
+    characters: z.record(snowflake, z.string().min(1)).default({}),
+  })
+  .strict();
+
 export const configSchema = z
   .object({
     recording: z
@@ -41,6 +54,9 @@ export const configSchema = z
      * object for an account several people share: `{ name, disambiguate: [identities…] }`.
      */
     speakers: z.record(snowflake, z.union([z.string().min(1), sharedSpeaker])).default({}),
+
+    /** Voice channel ID → the campaign played there: its playable characters and background. */
+    campaigns: z.record(snowflake, campaign).default({}),
 
     transcription: z
       .object({
@@ -88,18 +104,24 @@ export const configSchema = z
         detail: z.enum(['low', 'medium', 'high']).default('medium'),
         /** Put [HH:MM:SS] references next to points in the summary. */
         cite_timestamps: z.boolean().default(true),
-        /** What the summary should capture. Each rule becomes a section. */
-        include: z
-          .array(z.string().min(1))
-          .min(1)
-          .default(['Main topics discussed', 'Decisions made', 'Action items and who owns them', 'Open questions and unresolved issues']),
+        /**
+         * Extra recap sections after NPCs, Locations, What happened and Combat: each rule becomes a
+         * section, in this order.
+         */
+        include: z.array(z.string().min(1)).default(['Loot, rewards and purchases', 'Quests, hooks and open threads']),
         /** What to leave out even if it matches an include rule. */
         exclude: z.array(z.string().min(1)).default([]),
         /** Background Claude should know: what these calls are, who people are, recurring names. */
         context: z.string().optional(),
+        /** Claude fixes misheard words and drops filler before the recap is written. */
+        cleanup: z.boolean().default(true),
+        /** Reverts clean-up edits that changed a line too much or dropped real content. No API calls. */
+        cleanup_audit: z.boolean().default(true),
+        /** Claude re-reads the transcript against the recap and adds anything it missed. */
+        recap_audit: z.boolean().default(true),
         /** Transcript is processed in chunks of this many minutes. */
         chunk_minutes: z.number().min(5).max(60).default(20),
-        /** Folder with prompt templates overriding the built-in ones (extract.md / synthesize.md / disambiguate.md). */
+        /** Folder with prompt templates overriding the built-in ones (extract.md, synthesize.md, cleanup.md, audit.md, revise.md, disambiguate.md). */
         prompts_dir: z.string().optional(),
       })
       .strict()

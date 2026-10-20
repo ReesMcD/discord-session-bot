@@ -144,8 +144,8 @@ test('prompts: custom versions are validated, saved to a folder config points at
   try {
     const list = (await (await req('/prompts')).json()) as { dir: null; prompts: { name: string; custom: null; builtIn: string }[] };
     assert.equal(list.dir, null);
-    assert.deepEqual(list.prompts.map((p) => p.name), ['extract', 'synthesize', 'disambiguate']);
-    assert.match(list.prompts[0]!.builtIn, /\{\{include_rules\}\}/);
+    assert.deepEqual(list.prompts.map((p) => p.name), ['disambiguate', 'cleanup', 'extract', 'synthesize', 'audit', 'revise']);
+    assert.match(list.prompts.find((p) => p.name === 'extract')!.builtIn, /\{\{include_rules\}\}/);
 
     const bad = await req('/prompts/extract', { method: 'PUT', body: JSON.stringify({ text: 'Use {{typo}}' }) });
     assert.equal(bad.status, 400);
@@ -156,8 +156,8 @@ test('prompts: custom versions are validated, saved to a folder config points at
     assert.match(readFileSync(configPath, 'utf8'), /prompts_dir: prompts\.local/);
     assert.ok(existsSync(join(root, 'prompts.local', 'extract.md')));
 
-    const after = (await (await req('/prompts/extract', { method: 'DELETE' })).json()) as { prompts: { custom: string | null }[] };
-    assert.equal(after.prompts[0]!.custom, null);
+    const after = (await (await req('/prompts/extract', { method: 'DELETE' })).json()) as { prompts: { name: string; custom: string | null }[] };
+    assert.equal(after.prompts.find((p) => p.name === 'extract')!.custom, null);
   } finally {
     process.chdir(cwd);
   }
@@ -173,6 +173,35 @@ test('people from past sessions, and file downloads', async () => {
   assert.equal(file.status, 200);
   assert.match(await file.text(), /Rees: Hello table\./);
   assert.equal((await req('/sessions/game-1/files/..%2Fsecret')).status, 404);
+});
+
+test('the recap can be edited: saved, generated copy kept, refused while it is being regenerated', async () => {
+  const { req, dir, jobs } = setup();
+  const put = (markdown: unknown) => req('/sessions/game-1/summary', { method: 'PUT', body: JSON.stringify({ markdown }) });
+  assert.equal((await put('# Recap')).status, 400, 'no recap yet');
+  writeFileSync(join(dir, 'summary.md'), '# Recap: game-1\n\n## NPCs\n\n- Strahd\n');
+
+  assert.equal((await put(42)).status, 400);
+  const res = await put('# Recap: game-1\n\n## NPCs\n\n- Strahd\n- Ireena\n');
+  assert.equal(res.status, 200);
+  const detail = (await res.json()) as { summary: string; recapState: string; editedAt: string };
+  assert.equal(detail.recapState, 'edited');
+  assert.match(detail.summary, /- Ireena/);
+  assert.ok(detail.editedAt);
+  assert.match(readFileSync(join(dir, 'summary', 'generated.md'), 'utf8'), /- Strahd\n$/);
+  assert.equal((await req('/sessions/nope/summary', { method: 'PUT', body: '{}' })).status, 404);
+
+  // While a summarize job is queued or running, edits are refused (it would overwrite them).
+  let release!: () => void;
+  const blocked = new Promise<void>((r) => (release = r));
+  const busy = new JobRunner(async () => blocked);
+  const api = createApi({ password: PASSWORD, dataDir: join(dir, '..', '..'), configStore: new ConfigStore(join(dir, 'none.yaml')), jobs: busy });
+  busy.enqueue('game-1', 'summarize');
+  const refused = await api.request('/sessions/game-1/summary', { method: 'PUT', headers: { Authorization: `Bearer ${PASSWORD}` }, body: JSON.stringify({ markdown: 'x' }) });
+  assert.equal(refused.status, 409);
+  release();
+  await busy.idle();
+  await jobs.idle();
 });
 
 test('replacing an inline list keeps its comment, above the key', () => {

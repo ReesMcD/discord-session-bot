@@ -8,6 +8,7 @@ import { DEFAULT_PROMPTS_DIR, PROMPT_NAMES, checkTemplate, deletePrompt, readPro
 import { SESSION_FILES, knownPeople, listSessions, sessionDetail, sessionDirFor } from './sessions.js';
 import { existsSync, readFileSync } from 'node:fs';
 import type { PromptName } from '../summary/prompts.js';
+import { saveRecapEdit } from '../summary/recapEdits.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
 
 export interface ApiOptions {
@@ -52,6 +53,24 @@ export function createApi(opts: ApiOptions): Hono {
       'Content-Type': 'text/markdown; charset=utf-8',
       'Content-Disposition': `attachment; filename="${c.req.param('id')}-${name}"`,
     });
+  });
+
+  /** Saves a hand-edited recap (summary.md). The generated version is kept alongside. */
+  api.put('/sessions/:id/summary', async (c) => {
+    const id = c.req.param('id');
+    const dir = sessionDirFor(opts.dataDir, id);
+    if (!dir) return c.json({ error: 'not found' }, 404);
+    if (opts.jobs.list(id).some((j) => j.step === 'summarize' && (j.status === 'queued' || j.status === 'running'))) {
+      return c.json({ error: 'The recap is being regenerated; wait for it to finish, then edit' }, 409);
+    }
+    const { markdown } = (await c.req.json().catch(() => ({}))) as { markdown?: unknown };
+    if (typeof markdown !== 'string') return c.json({ error: 'markdown is required' }, 400);
+    try {
+      saveRecapEdit(dir, markdown);
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+    return c.json({ ...sessionDetail(opts.dataDir, id)!, jobs: opts.jobs.list(id) });
   });
 
   api.get('/people', (c) => c.json(knownPeople(opts.dataDir)));

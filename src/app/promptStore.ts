@@ -2,13 +2,17 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join, resolve } from 'node:path';
 import { loadTemplate, render, type PromptName } from '../summary/prompts.js';
 
-export const PROMPT_NAMES: PromptName[] = ['extract', 'synthesize', 'disambiguate'];
+/** In pipeline order: speaker labels, clean-up, extraction, the recap, its audit and revision. */
+export const PROMPT_NAMES: PromptName[] = ['disambiguate', 'cleanup', 'extract', 'synthesize', 'audit', 'revise'];
 
 /** The placeholders the code fills in for each prompt; a custom template may only use these. */
 export const PLACEHOLDERS: Record<PromptName, string[]> = {
   extract: ['context', 'include_rules', 'exclude_rules'],
   synthesize: ['context', 'include_rules', 'exclude_rules', 'detail', 'detail_guidance', 'citation_guidance'],
   disambiguate: ['context', 'accounts'],
+  cleanup: ['context', 'vocabulary'],
+  audit: ['context', 'recap'],
+  revise: ['context', 'citation_guidance'],
 };
 
 /** Where app-edited prompts go when config.yaml doesn't name a folder (git-ignored). */

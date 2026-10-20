@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { listUtterances, paths, readJson, readParticipants, readSessionInfo, type Participant, type SessionInfo } from '../session/layout.js';
 import type { TranscriptLine } from '../transcript/merge.js';
+import { readEditState, recapState, type RecapState } from '../summary/recapEdits.js';
 import { summaryPaths, type SummaryMeta } from '../summary/summarizeSession.js';
 
 const SESSION_ID = /^[\w.-]+$/;
@@ -79,6 +80,9 @@ export interface SessionDetail extends SessionSummary {
   speakerLines: TranscriptLine[] | null;
   summary: string | null;
   summaryMeta: SummaryMeta | null;
+  /** Whether the recap is as generated or was edited by hand, and when. */
+  recapState: RecapState | null;
+  editedAt: string | null;
 }
 
 export function sessionDetail(dataDir: string, id: string): SessionDetail | undefined {
@@ -93,6 +97,8 @@ export function sessionDetail(dataDir: string, id: string): SessionDetail | unde
     speakerLines: existsSync(paths.disambiguatedSegments(dir)) ? segmentsOf(dir, paths.disambiguatedSegments(dir)).lines : null,
     summary: existsSync(summaryFile) ? readFileSync(summaryFile, 'utf8') : null,
     summaryMeta: readJson<SummaryMeta>(summaryPaths.meta(dir)) ?? null,
+    recapState: recapState(dir),
+    editedAt: readEditState(dir)?.editedAt ?? null,
   };
 }
 
@@ -127,5 +133,6 @@ export function knownPeople(dataDir: string): Person[] {
 export const SESSION_FILES = {
   'transcript.md': (dir: string) => paths.transcript(dir),
   'transcript.speakers.md': (dir: string) => paths.disambiguatedTranscript(dir),
+  'transcript.clean.md': (dir: string) => paths.cleanTranscript(dir),
   'summary.md': (dir: string) => summaryPaths.markdown(dir),
 } as const;
