@@ -6,6 +6,7 @@ import type { Guild, VoiceBasedChannel } from 'discord.js';
 import { paths, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { RecordingStatus } from '../bot/types.js';
 import { skipReason, type RecordFilterConfig } from './filters.js';
+import { ReconnectBudget } from './reconnect.js';
 import { UtteranceRecorder, type UtteranceRecord } from './UtteranceRecorder.js';
 
 export interface SessionRecorderOptions {
@@ -40,7 +41,7 @@ export class SessionRecorder extends EventEmitter {
   private readonly skipped = new Map<string, { name: string; reason: string }>();
   private readonly active = new Map<string, Promise<void>>();
   private readonly resolving = new Set<string>();
-  private reconnects = 0;
+  private readonly reconnects = new ReconnectBudget();
   private stopping = false;
   private readonly info: SessionInfo & { source: string };
   private readonly log: (msg: string) => void;
@@ -70,7 +71,7 @@ export class SessionRecorder extends EventEmitter {
       state: this.state,
       participants: [...this.participants].map(([id, p]) => ({ id, ...p })),
       skipped: [...this.skipped].map(([id, s]) => ({ id, ...s })),
-      reconnects: this.reconnects,
+      reconnects: this.reconnects.total,
     };
   }
 
@@ -119,7 +120,10 @@ export class SessionRecorder extends EventEmitter {
     connection.on('error', (err) => this.log(`voice connection error: ${err.message}`));
     connection.on('stateChange', async (oldState, newState) => {
       if (oldState.status === newState.status || this.stopping) return;
-      if (newState.status === VoiceConnectionStatus.Ready) this.setState('recording');
+      if (newState.status === VoiceConnectionStatus.Ready) {
+        this.reconnects.connected();
+        this.setState('recording');
+      }
       if (newState.status !== VoiceConnectionStatus.Disconnected) return;
       this.setState('reconnecting');
       try {
@@ -128,9 +132,9 @@ export class SessionRecorder extends EventEmitter {
           entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
         ]);
       } catch {
-        this.reconnects++;
-        this.log(`voice disconnected; rejoining (attempt ${this.reconnects})`);
-        if (this.reconnects > 10 || !connection.rejoin()) {
+        const keepTrying = this.reconnects.attempt();
+        this.log(`voice disconnected; rejoining (reconnect ${this.reconnects.total})`);
+        if (!keepTrying || !connection.rejoin()) {
           this.log('giving up on reconnecting');
           this.emit('lost');
         }

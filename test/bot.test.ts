@@ -10,6 +10,7 @@ import { createApi } from '../src/app/api.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner, type Job } from '../src/app/jobs.js';
 import { paths, writeJson } from '../src/session/layout.js';
+import { ReconnectBudget } from '../src/recording/reconnect.js';
 import { OggOpusWriter } from '../src/audio/OggOpusWriter.js';
 import { SILENCE_FRAME } from '../src/audio/opus.js';
 import { parseConfig } from '../src/config/load.js';
@@ -136,4 +137,17 @@ test('API without a bot reports it as off', async () => {
   assert.deepEqual(await res.json(), { state: 'off', recording: null });
   const join_ = await api.request('/bot/join', { method: 'POST', headers: { Authorization: 'Bearer pw-12345678' }, body: '{"channelId":"222222222222222222"}' });
   assert.equal(join_.status, 409);
+});
+
+test('reconnects: separate recovered drops never stop a recording; 10 failures in a row do', () => {
+  const long = new ReconnectBudget(10);
+  for (let drop = 0; drop < 50; drop++) {
+    assert.equal(long.attempt(), true, `drop ${drop + 1}`);
+    long.connected();
+  }
+  assert.equal(long.total, 50);
+
+  const dead = new ReconnectBudget(10);
+  for (let i = 0; i < 10; i++) assert.equal(dead.attempt(), true);
+  assert.equal(dead.attempt(), false, 'the 11th failure in a row gives up');
 });
