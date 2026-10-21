@@ -69,6 +69,25 @@ export interface SessionDetail extends SessionSummary {
   editedAt: string | null;
   /** People to pair (still unpaired under the current roster, not dismissed). */
   unpaired: UnpairedSpeaker[];
+  /** The last upload to the wiki, if any. */
+  upload: RecapUpload | null;
+  /** The host the recap would be uploaded to (Settings → Upload), or null when uploading is off. */
+  uploadTo: string | null;
+}
+
+/** When the recap was last uploaded, and whether it was edited since. */
+export interface RecapUpload {
+  uploadedAt: string;
+  /** The wiki page, if the endpoint returned one. */
+  url?: string;
+  changedSince: boolean;
+}
+
+/** POST /upload/test */
+export interface UploadTestResult {
+  ok: boolean;
+  status?: number;
+  message: string;
 }
 
 /** GET /sessions/:id also lists the session's jobs. */
@@ -144,7 +163,7 @@ export interface PromptInfo {
 
 // --- Jobs ----------------------------------------------------------------------------------------
 
-export type JobStep = 'transcribe' | 'merge' | 'disambiguate' | 'summarize';
+export type JobStep = 'transcribe' | 'merge' | 'disambiguate' | 'summarize' | 'upload';
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface Job {

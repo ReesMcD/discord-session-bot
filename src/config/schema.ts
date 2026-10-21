@@ -143,6 +143,26 @@ export const configSchema = z
       })
       .strict()
       .prefault({}),
+
+    /**
+     * Sends the recap to your wiki (or anything that accepts an HTTP request). The key, if the
+     * endpoint needs one, is WIKI_UPLOAD_TOKEN: in .env, or Settings → Keys in the Mac app.
+     */
+    upload: z
+      .object({
+        /** Where the recap is sent. Empty = uploading is off. */
+        url: z.url({ protocol: /^https?$/ }).optional(),
+        method: z.enum(['POST', 'PUT']).default('POST'),
+        /** json: { id, title, date, campaign, markdown, … }; markdown: the recap with YAML front matter. */
+        format: z.enum(['json', 'markdown']).default('json'),
+        /** bearer: "Authorization: Bearer <key>"; header: "<header_name>: <key>"; none: no key. */
+        auth: z.enum(['bearer', 'header', 'none']).default('bearer'),
+        header_name: z.string().regex(/^[A-Za-z0-9-]+$/, 'letters, digits and dashes only').default('X-Api-Key'),
+        /** Upload as soon as a recording's recap is written. Off: review and edit it first. */
+        auto: z.boolean().default(false),
+      })
+      .strict()
+      .prefault({}),
   })
   .strict();
 

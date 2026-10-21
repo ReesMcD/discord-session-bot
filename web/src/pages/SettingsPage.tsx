@@ -9,13 +9,15 @@ import { RecapSection } from './settings/RecapSection';
 import { PromptsSection } from './settings/PromptsSection';
 import { YamlSection } from './settings/YamlSection';
 import { KeysSection } from './settings/KeysSection';
+import { UploadSection } from './settings/UploadSection';
 
-type Section = 'keys' | 'people' | 'campaigns' | 'transcription' | 'summary' | 'prompts' | 'yaml';
+type Section = 'keys' | 'people' | 'campaigns' | 'transcription' | 'summary' | 'upload' | 'prompts' | 'yaml';
 const SECTIONS: { key: Section; label: string }[] = [
   ...(window.sessionBot ? [{ key: 'keys' as Section, label: 'Keys & phone' }] : []),
   { key: 'people', label: 'Recording & people' },
   { key: 'campaigns', label: 'Campaigns' },
   { key: 'summary', label: 'Recap' },
+  { key: 'upload', label: 'Upload' },
   { key: 'transcription', label: 'Transcription' },
   { key: 'prompts', label: 'Prompts' },
   { key: 'yaml', label: 'YAML' },
@@ -95,6 +97,7 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
       {draft && section === 'campaigns' && <CampaignsSection config={draft} update={update} people={people} err={err} />}
       {draft && section === 'transcription' && <TranscriptionSection config={draft} update={update} err={err} />}
       {draft && section === 'summary' && <RecapSection config={draft} update={update} err={err} />}
+      {draft && section === 'upload' && <UploadSection config={draft} update={update} err={err} />}
       {section === 'prompts' && <PromptsSection />}
       {section === 'yaml' && <YamlSection state={state} onSaved={load} />}
 

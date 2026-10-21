@@ -49,7 +49,7 @@ run → Artifacts**, and you need to be signed in to GitHub to download it. Tagg
 | Label speakers on shared accounts | **Label speakers** button, or `npm run disambiguate` | Ready |
 | Session recap (Claude): NPCs, locations, what happened, combat with kill count | **Write recap** button (or automatic), or `npm run summarize` | Ready |
 | Edit, add to and copy the recap | The session's **Recap** tab | Ready |
-| Upload the recap to a wiki | none yet | Planned ([#5](https://github.com/ReesMcD/discord-session-bot/issues/5)) |
+| Upload the recap to your wiki (any endpoint that takes a POST/PUT) | The recap's **Upload to wiki** button; set up under Settings → Upload | Ready |
 | Play music into the voice channel from a built-in browser (like Kenku FM) | The Mac app's **Music** tab; volume and tabs from the phone too | Ready, awaiting a live test |
 | Import a [Craig](https://craig.chat) recording | `npm run import:craig` | Ready |
 | Web app on your phone | Tailscale → `http://<Mac name>:4400` | Ready |
@@ -123,6 +123,7 @@ open -e .env       # or any editor
 DISCORD_TOKEN=...          # from step 4 (only for recording with the bot)
 GROQ_API_KEY=...           # from step 3
 ANTHROPIC_API_KEY=...      # from step 3
+WIKI_UPLOAD_TOKEN=...      # optional: your wiki upload endpoint's key
 DATA_DIR=./data            # where recordings, transcripts and recaps are saved
 CONFIG_PATH=./config.yaml
 ```
@@ -377,6 +378,10 @@ What's in it:
   - **Recording & people**: pick people to ignore or name from anyone seen in past recordings, and turn on *Shared account* for a Discord account several people use.
   - **Campaigns**: per voice channel, the campaign's name, background and who plays which character.
   - **Recap**: extra sections, detail level, and the clean-up and audit steps.
+  - **Upload**: where recaps are sent (your wiki's endpoint), how (POST or PUT, JSON or a Markdown
+    file) and the kind of key. The key itself is `WIKI_UPLOAD_TOKEN` in `.env`, or Settings → Keys in
+    the Mac app. **Test connection** checks it, and *What your endpoint receives* shows the exact
+    request. Uploading a session again sends the same `id`, so the endpoint can update the page.
   - **Transcription**: the rest of the options.
   - **Prompts**: edit Claude's instructions. The built-in prompts are kept, so you can always revert.
   - **YAML**: raw editing of `config.yaml`.

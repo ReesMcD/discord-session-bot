@@ -14,6 +14,7 @@ const STEP_LABEL: Record<JobStep, string> = {
   merge: 'Rebuild transcript',
   disambiguate: 'Label speakers',
   summarize: 'Write recap',
+  upload: 'Upload to wiki',
 };
 
 export function SessionPage({ id }: { id: string }) {
@@ -127,7 +128,7 @@ export function SessionPage({ id }: { id: string }) {
 
       {current === 'summary' &&
         (s.summary ? (
-          <RecapCard s={{ ...s, summary: s.summary }} busy={active?.step === 'summarize'} onSaved={(d) => (setS(d), setJobs(d.jobs))} />
+          <RecapCard s={{ ...s, summary: s.summary }} busy={active?.step === 'summarize'} uploading={active?.step === 'upload'} onUpload={() => void run('upload')} onSaved={(d) => (setS(d), setJobs(d.jobs))} />
         ) : (
           <Empty title="No recap yet">{s.has.transcript ? 'Press Write recap above.' : 'Transcribe the session first.'}</Empty>
         ))}

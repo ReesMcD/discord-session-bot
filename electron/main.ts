@@ -205,8 +205,10 @@ function icon(name: 'trayTemplate' | 'trayRecording') {
 function registerIpc(): void {
   ipcMain.on('password', (e) => (e.returnValue = secrets.password));
   ipcMain.handle('version', () => app.getVersion());
-  ipcMain.handle('keys:get', () => ({ discord: !!secrets.discord, groq: !!secrets.groq, anthropic: !!secrets.anthropic, password: true }));
-  ipcMain.handle('keys:set', async (_e, patch: { discord?: string; groq?: string; anthropic?: string }) => {
+  ipcMain.handle('keys:get', () => ({ discord: !!secrets.discord, groq: !!secrets.groq, anthropic: !!secrets.anthropic, wiki: !!secrets.wiki, password: true }));
+  ipcMain.handle('keys:set', async (_e, input: Record<string, unknown>) => {
+    // Only the known keys, as strings: the password is reset through its own call.
+    const patch = Object.fromEntries((['discord', 'groq', 'anthropic', 'wiki'] as const).filter((k) => typeof input[k] === 'string').map((k) => [k, input[k] as string]));
     const discordChanged = patch.discord !== undefined && patch.discord.trim() !== (secrets.discord ?? '');
     secrets = secretStore.update(patch);
     applyToEnv(secrets);

@@ -9,12 +9,16 @@ import { describeRun, summarizeSession } from '../summary/summarizeSession.js';
 import { sharedAccounts, type Config } from '../config/schema.js';
 import type { StepRunner } from './jobs.js';
 import { sessionDirFor } from './sessions.js';
+import { UPLOAD_TOKEN_ENV, uploadRecap } from '../upload/recapUpload.js';
 
 export interface StepDeps {
   dataDir: string;
   configPath?: string;
   transcriber?: (config: Config['transcription']) => Transcriber;
   summaryModel?: (config: Config) => SummaryModel;
+  /** For tests: the upload's HTTP client and retry delay. */
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** Connects job steps to the pipeline. Config is re-read for every job, so edits apply immediately. */
@@ -55,6 +59,10 @@ export function pipelineRunner(deps: StepDeps): StepRunner {
       case 'summarize': {
         const { meta } = await summarizeSession(dir, config, hash, makeModel(config), { force: job.force, log });
         log(`Recap written: ${describeRun(meta)}`);
+        return;
+      }
+      case 'upload': {
+        await uploadRecap(dir, config, process.env[UPLOAD_TOKEN_ENV], { log, ...(deps.fetch ? { fetch: deps.fetch } : {}), ...(deps.sleep ? { sleep: deps.sleep } : {}) });
         return;
       }
     }

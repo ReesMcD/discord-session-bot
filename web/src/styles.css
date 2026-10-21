@@ -222,6 +222,8 @@ button.stop { width: 100%; min-height: 56px; border-radius: 16px; border: 0; bac
   padding: 10px;
 }
 .recap-toolbar { margin-bottom: 12px; }
+.upload-line { margin: -4px 0 12px; gap: 8px; }
+.upload-confirm { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border-color: var(--accent); }
 .recap-section .markdown > :first-child, .recap-section > :first-child { margin-top: 0; }
 .recap-heading { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
 .recap-section ul { padding-left: 18px; margin: 0; }
@@ -305,3 +307,7 @@ button.stop { width: 100%; min-height: 56px; border-radius: 16px; border: 0; bac
   .music-tab .music-slider { grid-column: 1 / -1; grid-row: 2; }
   .music-master { grid-template-columns: 1fr; }
 }
+.good-text { color: var(--good); }
+.bad-text { color: var(--bad); }
+details.card > summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+.code-sample { background: var(--bg); border-radius: 10px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; overflow: auto; white-space: pre; margin: 8px 0; }
