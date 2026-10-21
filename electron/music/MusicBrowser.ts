@@ -39,6 +39,8 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
   private master = 1;
   private monitor = true;
   private playingSounds: string[] = [];
+  /** Tabs fading out after a scene change, closed when their fade ends (unless a scene keeps them). */
+  private readonly closing = new Map<string, NodeJS.Timeout>();
   private capture!: BrowserWindow;
   private host!: BrowserWindow;
   private shown: { win: BrowserWindow; bounds: Rectangle } | undefined;
@@ -125,6 +127,8 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
   }
 
   closeTab(id: string): void {
+    clearTimeout(this.closing.get(id));
+    this.closing.delete(id);
     const tab = this.tabs.get(id);
     if (!tab) return;
     this.capture.webContents.send('music:remove', id);
@@ -175,10 +179,15 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
       keep.add(id);
       first ??= id;
     }
+    for (const id of keep) {
+      // Switching back mid-fade: an earlier scene change must not close this tab after all.
+      clearTimeout(this.closing.get(id));
+      this.closing.delete(id);
+    }
     for (const tab of [...this.tabs.values()]) {
-      if (keep.has(tab.id)) continue;
+      if (keep.has(tab.id) || this.closing.has(tab.id)) continue;
       this.fade(tab.id, 0, fadeMs);
-      setTimeout(() => this.closeTab(tab.id), fadeMs + 200);
+      this.closing.set(tab.id, setTimeout(() => (this.closing.delete(tab.id), this.closeTab(tab.id)), fadeMs + 200));
     }
     if (first) this.activeId = first;
     this.place();
