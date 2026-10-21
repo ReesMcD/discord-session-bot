@@ -16,16 +16,33 @@ const sharedSpeaker = z
   })
   .strict();
 
+const dndbeyondId = z.number().int().positive();
+
+/** A character as the app's roster writes it; a plain "Name — description" string also works. */
+const characterEntry = z
+  .object({
+    name: z.string().min(1),
+    /** e.g. "dwarf fighter 5": a hint for Claude, shown next to the name. */
+    description: z.string().min(1).optional(),
+    /** The character's D&D Beyond ID, from its sheet's URL. */
+    dndbeyond: dndbeyondId.optional(),
+  })
+  .strict();
+
 const campaign = z
   .object({
     name: z.string().min(1).optional(),
     /** Background for this campaign, added to the prompts after summary.context. */
     context: z.string().optional(),
+    /** The campaign's D&D Beyond ID, from its URL. */
+    dndbeyond: dndbeyondId.optional(),
     /**
-     * Discord user ID → the character they play, e.g. "Thorin — dwarf fighter" (or "DM"). The text
-     * before " — ", " – ", " - " or ":" is the character's name; the rest is a hint for Claude.
+     * Discord user ID → the character they play: `{ name, description?, dndbeyond? }`, or a string
+     * like "Thorin — dwarf fighter" (or "DM"), where the text before " — " is the name.
      */
-    characters: z.record(snowflake, z.string().min(1)).default({}),
+    characters: z.record(snowflake, z.union([z.string().min(1), characterEntry])).default({}),
+    /** People who talk at the table but don't play; never asked about as unpaired. */
+    guests: z.array(snowflake).default([]),
   })
   .strict();
 

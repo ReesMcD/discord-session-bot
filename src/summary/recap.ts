@@ -1,4 +1,4 @@
-import type { Character } from './campaign.js';
+import type { Character } from '../config/campaign.js';
 import type { Extraction } from './model.js';
 
 type Combat = Extraction['combats'][number];

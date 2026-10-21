@@ -1,5 +1,6 @@
 import { readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { campaignFor } from '../config/campaign.js';
 import { sharedAccounts, speakerNames, type Config } from '../config/schema.js';
 import { paths, readJson, readParticipants, readSessionInfo, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { SpeakerTranscript } from '../transcription/transcribeSession.js';
@@ -42,6 +43,8 @@ export interface MergeOptions extends JoinOptions {
   sessionStartMs: number;
   aliases: Record<string, string>;
   participants: Record<string, Participant>;
+  /** userId → character name, for campaign sessions: lines are named by character. */
+  characters?: Record<string, string>;
 }
 
 /** Joins consecutive lines from the same speaker when the pause is short. Input must be time-ordered. */
@@ -77,14 +80,19 @@ export function mergeSegments(bySpeaker: ReadonlyMap<string, readonly SpeakerSeg
 
   const lines: TranscriptLine[] = all
     .filter((seg) => seg.text.trim())
-    .map((seg) => ({
-      userId: seg.userId,
-      speaker: speakerName(seg.userId, opts.aliases, opts.participants),
-      offsetMs: seg.startMs - opts.sessionStartMs,
-      startMs: seg.startMs,
-      endMs: seg.endMs,
-      text: seg.text.trim(),
-    }));
+    .map((seg): TranscriptLine => {
+      const person = speakerName(seg.userId, opts.aliases, opts.participants);
+      const character = opts.characters?.[seg.userId];
+      return {
+        userId: seg.userId,
+        speaker: character ?? person,
+        ...(character && character !== person ? { player: person } : {}),
+        offsetMs: seg.startMs - opts.sessionStartMs,
+        startMs: seg.startMs,
+        endMs: seg.endMs,
+        text: seg.text.trim(),
+      };
+    });
   return joinLines(lines, opts);
 }
 
@@ -98,7 +106,7 @@ function formatDate(ms: number, timeZone: string | undefined): string {
 
 export function renderMarkdown(session: SessionInfo, lines: readonly TranscriptLine[], timeZone?: string): string {
   const endMs = session.stoppedAt ?? lines.reduce((m, l) => Math.max(m, l.endMs), session.startedAt);
-  const speakers = [...new Set(lines.filter((l) => l.inferred?.confidence !== 'unclear').map((l) => l.speaker))];
+  const speakers = [...new Set(lines.filter((l) => l.inferred?.confidence !== 'unclear').map((l) => (l.player ? `${l.speaker} (${l.player})` : l.speaker)))];
   const header = [
     `# Transcript: ${session.id}`,
     '',
@@ -131,10 +139,12 @@ export function mergeSession(sessionDir: string, config: Config): MergeResult {
     if (t) bySpeaker.set(t.userId, t.segments);
   }
   const session = readSessionInfo(sessionDir);
+  const campaign = campaignFor(config, session);
   const lines = mergeSegments(bySpeaker, {
     sessionStartMs: session.startedAt,
     aliases: speakerNames(config),
     participants: readParticipants(sessionDir),
+    ...(campaign ? { characters: Object.fromEntries(campaign.characters.map((c) => [c.userId, c.label])) } : {}),
     mergeGapMs: config.transcript.merge_gap_seconds * 1000,
     maxLineMs: config.transcript.max_line_seconds * 1000,
     noJoin: new Set(sharedAccounts(config).keys()),

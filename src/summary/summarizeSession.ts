@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { sharedAccounts, type Config } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor } from './campaign.js';
+import { campaignFor, unpairedSpeakers } from '../config/campaign.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { cleanTranscript, type CleanupResult } from './cleanup.js';
@@ -15,7 +15,7 @@ import { loadTemplate, render } from './prompts.js';
 import { countNotes, formatNotes, insertKillCount, tallyKills } from './recap.js';
 import { auditRecap, type RecapAuditResult } from './recapAudit.js';
 import { recapPaths, writeGeneratedRecap } from './recapEdits.js';
-import type { SummaryMeta } from '../shared/types.js';
+import type { SummaryMeta, UnpairedSpeaker } from '../shared/types.js';
 
 export type { SummaryMeta };
 
@@ -25,6 +25,7 @@ export const summaryPaths = {
   meta: (s: string) => join(s, 'summary', 'meta.json'),
   cleanupAudit: (s: string) => join(s, 'summary', 'audit', 'cleanup.json'),
   recapAudit: (s: string) => join(s, 'summary', 'audit', 'recap.json'),
+  unpaired: (s: string) => join(s, 'summary', 'unpaired.json'),
   markdown: recapPaths.markdown,
 };
 
@@ -115,8 +116,14 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
     if (!lines.length) throw new Error('The clean-up dropped every line; turn off summary.cleanup and try again');
   }
 
+  // Who isn't on the roster yet, with the clean-up's guesses; "Ignore" from an earlier run is kept.
+  const campaign = campaignFor(config, session);
+  const dismissed = new Set((readJson<UnpairedSpeaker[]>(summaryPaths.unpaired(sessionDir)) ?? []).filter((u) => u.dismissed).map((u) => u.userId));
+  const unpaired = (cleanup?.unpaired ?? unpairedSpeakers(campaign, lines)).map((u) => (dismissed.has(u.userId) ? { ...u, dismissed: true } : u));
+  writeJson(summaryPaths.unpaired(sessionDir), unpaired);
+
   // 3. Extract notes per chunk.
-  const about = contextBlock(session, lines, config);
+  const about = contextBlock(session, lines, config, unpaired);
   const exclude = bullets(s.exclude, '- (no extra exclusions)');
   const extractT = loadTemplate('extract', s.prompts_dir);
   const synthT = loadTemplate('synthesize', s.prompts_dir);
@@ -187,12 +194,12 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
   }
 
   // The kill count is tallied in code so it's exact, and added last so no rewrite can change it.
-  const kills = tallyKills(notes, campaignFor(config, session)?.characters);
+  const guessed = unpaired.filter((u) => u.role === 'new_player' && u.character).map((u) => ({ label: u.character! }));
+  const kills = tallyKills(notes, [...(campaign?.characters ?? []), ...guessed]);
   body = insertKillCount(body, kills);
 
   const endMs = session.stoppedAt ?? lines.at(-1)!.endMs;
   const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', ...(config.transcript.timezone ? { timeZone: config.transcript.timezone } : {}) }).format(session.startedAt);
-  const campaign = campaignFor(config, session);
   const md = [
     `# Recap: ${campaign?.name ?? session.id}`,
     '',

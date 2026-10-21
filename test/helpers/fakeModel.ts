@@ -4,7 +4,7 @@ type Step = 'disambiguate' | 'cleanup' | 'extract' | 'audit' | 'synthesize';
 
 export interface Replies {
   disambiguate?: (opts: CallOptions) => Labels;
-  cleanup?: (opts: CallOptions) => Cleanup;
+  cleanup?: (opts: CallOptions) => Partial<Cleanup>;
   extract?: (opts: CallOptions) => Extraction;
   audit?: (opts: CallOptions) => AuditFindings;
   synthesize?: (opts: CallOptions) => string;
@@ -27,7 +27,7 @@ export class FakeModel implements SummaryModel {
     return this.answer('disambiguate', opts, this.replies.disambiguate?.(opts) ?? { labels: [] });
   }
   cleanup(opts: CallOptions) {
-    return this.answer('cleanup', opts, this.replies.cleanup?.(opts) ?? { edits: [], drops: [] });
+    return this.answer('cleanup', opts, { edits: [], drops: [], unpaired: [], ...this.replies.cleanup?.(opts) });
   }
   extract(opts: CallOptions) {
     return this.answer('extract', opts, this.replies.extract?.(opts) ?? emptyNotes());

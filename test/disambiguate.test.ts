@@ -192,3 +192,19 @@ test('Anthropic request for the labelling step uses structured output', async ()
   assert.equal(body.output_config.format.type, 'json_schema');
   assert.ok(body.output_config.format.schema.properties.labels);
 });
+
+test('in a campaign, a shared account named by its character is still relabelled per identity', async () => {
+  const { config } = parseConfig(CONFIG);
+  // As mergeSession writes them in a campaign where Rees's account is listed as "DM" and Sam plays Thorin.
+  const lines = LINES.map((l) => (l.userId === REES ? { ...l, speaker: 'DM', player: 'Rees' } : { ...l, speaker: 'Thorin', player: 'Sam' }));
+  const r = await disambiguateLines(lines, config, labeller([{ line: 1, speaker: 1, confident: true }, { line: 4, speaker: 2, confident: true }]), mkdtempSync(join(tmpdir(), 'dis-')), { id: 's', startedAt: T0 }, { log: () => {} });
+  assert.deepEqual(
+    r.lines.slice(0, 4).map((l) => [l.speaker, l.player, l.inferred?.account ?? null]),
+    [
+      ['DM', 'Rees', 'DM'],
+      ['Thorin', 'Sam', null],
+      ['DM', 'Rees', 'DM'],
+      ['Hamqueef', 'Rees', 'DM'],
+    ],
+  );
+});

@@ -8,7 +8,7 @@ import type { PromptName } from '../shared/types.js';
 export const PROMPT_VERSIONS = {
   extract: 'v2',
   synthesize: 'v2',
-  cleanup: 'v1',
+  cleanup: 'v2',
   audit: 'v1',
   revise: 'v1',
   disambiguate: 'v1',

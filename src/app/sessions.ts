@@ -5,6 +5,8 @@ import type { TranscriptLine } from '../transcript/merge.js';
 import { readEditState, recapState, type RecapState } from '../summary/recapEdits.js';
 import { summaryPaths, type SummaryMeta } from '../summary/summarizeSession.js';
 import type { Person, SessionDetail, SessionSummary } from '../shared/types.js';
+import type { Config } from '../config/schema.js';
+import { pendingUnpaired } from './unpaired.js';
 
 export type { Person, SessionDetail, SessionSummary };
 
@@ -64,7 +66,7 @@ export function listSessions(dataDir: string): SessionSummary[] {
     .sort((a, b) => b.startedAt - a.startedAt);
 }
 
-export function sessionDetail(dataDir: string, id: string): SessionDetail | undefined {
+export function sessionDetail(dataDir: string, id: string, config: Config | null = null): SessionDetail | undefined {
   const base = describeSession(dataDir, id);
   const dir = sessionDirFor(dataDir, id);
   if (!base || !dir) return undefined;
@@ -78,6 +80,7 @@ export function sessionDetail(dataDir: string, id: string): SessionDetail | unde
     summaryMeta: readJson<SummaryMeta>(summaryPaths.meta(dir)) ?? null,
     recapState: recapState(dir),
     editedAt: readEditState(dir)?.editedAt ?? null,
+    unpaired: pendingUnpaired(dir, config),
   };
 }
 

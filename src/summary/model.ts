@@ -40,6 +40,14 @@ export type Extraction = z.infer<typeof extractionSchema>;
 export const cleanupSchema = z.object({
   edits: z.array(z.object({ line: z.number().int().describe('The #N number of the line'), text: z.string().describe('The corrected text of the whole line') })),
   drops: z.array(z.number().int()).describe('#N numbers of lines that are pure filler'),
+  unpaired: z.array(
+    z.object({
+      speaker: z.number().int().describe('The U number of the person'),
+      role: z.enum(['new_player', 'guest']),
+      character: z.string().describe("The character's name, or empty if unknown"),
+      time,
+    }),
+  ),
 });
 
 export type Cleanup = z.infer<typeof cleanupSchema>;

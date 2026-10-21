@@ -16,3 +16,15 @@ Each line you may change starts with `#N`. Return only the lines you change:
 Lines marked `(context)` come from the previous section and are only there for continuity. Don't edit or drop them. Leave speaker names and timestamps alone.
 
 Most lines need no change. Return empty lists if nothing needs fixing.
+
+## People not on the roster yet
+
+{{unpaired}}
+
+For each person listed above who speaks in this section, add an entry to `unpaired` with their `U` number:
+
+- `role`: `new_player` if they're playing a character (they act in the game, others address them by a character name, they roll for their character), or `guest` if they're only watching or chatting.
+- `character`: the name of the character they play, if the transcript makes it clear (e.g. someone says "Garrick, you're up"). Leave it empty if you can't tell; don't guess a name.
+- `time`: the [HH:MM:SS] timestamp of the line that shows it most clearly.
+
+Skip people who don't speak in this section, and anyone not listed.

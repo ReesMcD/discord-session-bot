@@ -2,12 +2,13 @@ import { join } from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { SessionInfo } from '../session/layout.js';
 import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor } from './campaign.js';
+import { campaignFor, unpairedSpeakers } from '../config/campaign.js';
 import { chunkTranscript, formatLine, type Chunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { auditCleanup, type CleanupAuditReport, type Proposal } from './cleanupAudit.js';
 import { contextBlock } from './context.js';
-import type { SummaryModel, Usage } from './model.js';
+import type { Cleanup, SummaryModel, Usage } from './model.js';
+import type { UnpairedSpeaker } from '../shared/types.js';
 import { loadTemplate, render } from './prompts.js';
 
 export interface CleanupResult {
@@ -15,6 +16,8 @@ export interface CleanupResult {
   stats: { edited: number; dropped: number; chunks: number; chunksFromCache: number };
   /** Present when summary.cleanup_audit is on. */
   audit?: CleanupAuditReport;
+  /** People not on the campaign's roster, with Claude's guess at who they are where it had one. */
+  unpaired: UnpairedSpeaker[];
   modelsUsed: string[];
   usage: Usage;
   promptVersion: string;
@@ -31,6 +34,34 @@ function vocabulary(config: Config, session: SessionInfo): string {
   const characters = campaignFor(config, session)?.characters.map((c) => c.label) ?? [];
   const parts = [...(config.transcription.prompt ? [config.transcription.prompt.trim()] : []), ...(characters.length ? [`Characters: ${characters.join(', ')}`] : [])];
   return parts.length ? parts.join('\n') : '(none given; use the context above)';
+}
+
+function unpairedBlock(unpaired: readonly UnpairedSpeaker[]): string {
+  return unpaired.length ? unpaired.map((u, i) => `U${i + 1}: ${u.name}`).join('\n') : '(none: everyone who speaks is on the roster; return an empty `unpaired` list)';
+}
+
+/**
+ * One guess per person from the per-chunk answers: the role most chunks gave, the character name
+ * given most often, and the earliest line that shows that role.
+ */
+export function combineGuesses(unpaired: readonly UnpairedSpeaker[], answers: readonly Cleanup['unpaired'][]): UnpairedSpeaker[] {
+  return unpaired.map((person, i) => {
+    const mine = answers.flat().filter((a) => a.speaker === i + 1);
+    if (!mine.length) return person;
+    const players = mine.filter((a) => a.role === 'new_player');
+    const role = players.length >= mine.length - players.length ? 'new_player' : 'guest';
+    const counts = new Map<string, { name: string; n: number }>();
+    for (const a of mine) {
+      const name = a.character.trim();
+      if (!name) continue;
+      const entry = counts.get(name.toLowerCase()) ?? { name, n: 0 };
+      entry.n++;
+      counts.set(name.toLowerCase(), entry);
+    }
+    const character = role === 'new_player' ? [...counts.values()].sort((a, b) => b.n - a.n)[0]?.name : undefined;
+    const time = mine.filter((a) => a.role === role).map((a) => a.time).sort()[0];
+    return { ...person, role, ...(character ? { character } : {}), ...(time ? { time } : {}) };
+  });
 }
 
 function formatSection(chunk: Chunk, total: number, ids: ReadonlyMap<TranscriptLine, number>): string {
@@ -54,7 +85,8 @@ export async function cleanTranscript(
   const log = opts.log ?? console.log;
   const s = config.summary;
   const template = loadTemplate('cleanup', s.prompts_dir);
-  const system = render(template.text, { context: contextBlock(session, lines, config), vocabulary: vocabulary(config, session) });
+  const unpaired = unpairedSpeakers(campaignFor(config, session), lines);
+  const system = render(template.text, { context: contextBlock(session, lines, config), vocabulary: vocabulary(config, session), unpaired: unpairedBlock(unpaired) });
   const ids = new Map<TranscriptLine, number>();
   lines.forEach((l, i) => ids.set(l, i + 1));
 
@@ -103,6 +135,7 @@ export async function cleanTranscript(
     lines: out,
     stats: { edited, dropped, chunks: chunks.length, chunksFromCache: pass.fromCache },
     ...(audit ? { audit } : {}),
+    unpaired: combineGuesses(unpaired, pass.values.map((v) => v.unpaired ?? [])),
     modelsUsed: pass.modelsUsed,
     usage: pass.usage,
     promptVersion: `${template.version}#${template.hash}`,

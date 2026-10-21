@@ -158,3 +158,43 @@ button.stop { width: 100%; margin-top: 16px; border-color: var(--bad); font-size
 .card.notice {
   border-color: var(--accent);
 }
+
+/* Campaign roster */
+.roster-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) repeat(4, minmax(110px, 1fr)) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.roster-who {
+  display: flex;
+  flex-direction: column;
+  align-self: center;
+  min-width: 0;
+}
+.roster-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.roster-field input {
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .roster-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .roster-who {
+    grid-column: 1 / -1;
+  }
+}
+.unpaired-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
