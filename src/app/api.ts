@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { PromptName } from '../summary/prompts.js';
 import { saveRecapEdit } from '../summary/recapEdits.js';
 import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
-import type { BotControl, BotStatus, LiveSnapshot } from '../bot/types.js';
+import type { BotControl, BotStatus, LiveUpdate } from '../bot/types.js';
 import type { MusicControl, MusicStatus } from '../music/control.js';
 import { musicRoutes } from './musicRoutes.js';
 import { MusicLibrary } from '../music/library.js';
@@ -132,7 +132,7 @@ export function createApi(opts: ApiOptions): Hono {
       const send = (job: Job) => void stream.writeSSE({ event: 'job', data: JSON.stringify(job) });
       const sendBot = (status: BotStatus) => void stream.writeSSE({ event: 'bot', data: JSON.stringify(status) });
       const sendMusic = (status: MusicStatus) => void stream.writeSSE({ event: 'music', data: JSON.stringify(status) });
-      const sendLive = (live: LiveSnapshot) => void stream.writeSSE({ event: 'live', data: JSON.stringify(live) });
+      const sendLive = (update: LiveUpdate) => void stream.writeSSE({ event: 'live', data: JSON.stringify(update) });
       opts.bot?.on('live', sendLive);
       opts.jobs.on('job', send);
       opts.bot?.on('status', sendBot);

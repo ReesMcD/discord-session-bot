@@ -9,7 +9,8 @@ import { SessionRecorder } from '../recording/SessionRecorder.js';
 import { MusicBroadcast } from '../music/broadcast.js';
 import type { ConfigStore } from '../app/configStore.js';
 import type { JobRunner } from '../app/jobs.js';
-import type { BotControl, BotStatus, GuildInfo, LiveSnapshot, RecordingStatus } from './types.js';
+import type { BotControl, BotStatus, GuildInfo, LiveSnapshot, LiveUpdate, RecordingStatus } from './types.js';
+import type { LiveTranscript, TranscriptLine } from '../shared/types.js';
 import { LiveTranscriber } from '../transcription/live.js';
 import { createTranscriber } from '../transcription/factory.js';
 
@@ -172,7 +173,10 @@ export class BotService extends EventEmitter implements BotControl {
     try {
       const transcriber = new LiveTranscriber({ sessionDir, config, transcriber: createTranscriber(config.transcription), log: this.log });
       recorder.on('utterance', (rec) => transcriber.add(rec));
-      transcriber.on('lines', () => this.emit('live', this.liveTranscript()));
+      transcriber.on('lines', (added: TranscriptLine[], snapshot: LiveTranscript) => {
+        const update: LiveUpdate = { sessionId, added, ...(snapshot.error ? { error: snapshot.error } : {}) };
+        this.emit('live', update);
+      });
       transcriber.start();
       this.live = { sessionId, transcriber };
     } catch (err) {

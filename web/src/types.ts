@@ -11,6 +11,7 @@ export type {
   Job,
   JobStep,
   LiveTranscript,
+  LiveUpdate,
   MusicLibraryState,
   MusicScene,
   MusicSound,

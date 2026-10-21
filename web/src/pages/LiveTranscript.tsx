@@ -15,7 +15,12 @@ export function LiveTranscript({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     api<LiveSnapshot>('/bot/live').then(setLive, () => {});
-    return subscribe({ onLive: (l) => l.sessionId === sessionId && setLive(l) });
+    // Events carry only new lines; the first load (above) has everything before them.
+    return subscribe({
+      onLive: (u) =>
+        u.sessionId === sessionId &&
+        setLive((prev) => (prev?.sessionId === sessionId ? { sessionId, lines: [...prev.lines, ...u.added].sort((a, b) => a.startMs - b.startMs), ...(u.error ? { error: u.error } : {}) } : prev)),
+    });
   }, [sessionId]);
 
   const q = query.trim().toLowerCase();

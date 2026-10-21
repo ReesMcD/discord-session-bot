@@ -214,7 +214,14 @@ export interface RecordingStatus {
   live?: boolean;
 }
 
-/** GET /bot/live and the "live" event: lines transcribed during the recording. */
+/** The "live" event: only the lines added since the last one (GET /bot/live has them all). */
+export interface LiveUpdate {
+  sessionId: string;
+  added: TranscriptLine[];
+  error?: string;
+}
+
+/** GET /bot/live: lines transcribed during the recording. */
 export interface LiveTranscript {
   lines: TranscriptLine[];
   /** The last batch that failed, if the latest one did. */
