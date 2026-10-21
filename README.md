@@ -45,6 +45,7 @@ run → Artifacts**, and you need to be signed in to GitHub to download it. Tagg
 | Feature | Where | Status |
 |---|---|---|
 | Record a call: join a voice channel, one track per speaker, ignore bots/people | Mac app menu bar, or the app's Record tab | Ready, awaiting the first live test ([TESTING.md](TESTING.md)) |
+| Live transcript during the call (optional) | Record page, on the Mac and your phone; turn on under Settings → Transcription | Ready, awaiting a live test |
 | Transcribe (Groq Whisper) | Automatic after a recording, or the session's **Transcribe** button, or `npm run transcribe` | Ready |
 | Label speakers on shared accounts | **Label speakers** button, or `npm run disambiguate` | Ready |
 | Session recap (Claude): NPCs, locations, what happened, combat with kill count | **Write recap** button (or automatic), or `npm run summarize` | Ready |
@@ -385,7 +386,9 @@ What's in it:
     file) and the kind of key. The key itself is `WIKI_UPLOAD_TOKEN` in `.env`, or Settings → Keys in
     the Mac app. **Test connection** checks it, and *What your endpoint receives* shows the exact
     request. Uploading a session again sends the same `id`, so the endpoint can update the page.
-  - **Transcription**: the rest of the options.
+  - **Transcription**: the rest of the options, including the **live transcript**: lines appear on the
+    Record page a few seconds after they're spoken. It's a preview (the full transcript is made
+    after Stop as usual), so it at least doubles the transcription cost. Off by default.
   - **Prompts**: edit Claude's instructions. The built-in prompts are kept, so you can always revert.
   - **YAML**: raw editing of `config.yaml`.
 

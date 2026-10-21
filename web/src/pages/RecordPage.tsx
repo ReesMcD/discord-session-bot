@@ -4,6 +4,7 @@ import { hms, speakerHue } from '../format';
 import { href } from '../router';
 import type { BotStatus, GuildInfo, RecordingStatus } from '../types';
 import { Badge, Empty } from '../ui';
+import { LiveTranscript } from './LiveTranscript';
 
 const SKIP_REASON: Record<string, string> = { bot: 'bot', ignored_user: 'on the ignore list', self: 'this bot' };
 
@@ -210,6 +211,8 @@ function Recording({ rec, onStop, stopping }: { rec: RecordingStatus; onStop: ()
         <span className="stop-square" aria-hidden="true" />
         {stopping ? 'Stopping…' : 'Stop recording'}
       </button>
+
+      {rec.live && <LiveTranscript sessionId={rec.sessionId} />}
     </div>
   );
 }

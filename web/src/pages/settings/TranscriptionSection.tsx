@@ -1,5 +1,5 @@
 import type { Config } from '../../types';
-import { Field, NumberInput, Segmented } from '../../ui';
+import { Field, NumberInput, Segmented, Toggle } from '../../ui';
 import type { SectionProps } from './shared';
 
 export function TranscriptionSection({ config, update, err }: SectionProps) {
@@ -23,6 +23,12 @@ export function TranscriptionSection({ config, update, err }: SectionProps) {
         <Field label="Vocabulary hint" hint="Names and terms Whisper should spell correctly. Changing it re-transcribes next time." error={err('transcription.prompt')}>
           <textarea value={t.prompt ?? ''} placeholder="Names and terms: Rees, Sam, Waterdeep, Strahd." onChange={(e) => set('prompt', opt(e.target.value))} />
         </Field>
+        <Toggle
+          checked={t.live}
+          onChange={(v) => set('live', v)}
+          label="Live transcript while recording"
+          hint="Lines appear on the Record page a few seconds after they're spoken, on the Mac and your phone. It's a preview: everything is transcribed again after Stop, so it at least doubles the transcription cost."
+        />
       </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Transcript</h2>

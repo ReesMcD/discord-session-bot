@@ -23,6 +23,8 @@ export const paths = {
   /** Same again after Claude's clean-up pass (misheard words fixed, filler dropped). */
   cleanSegments: (dir: string) => join(dir, 'segments.clean.json'),
   cleanTranscript: (dir: string) => join(dir, 'transcript.clean.md'),
+  /** Lines transcribed during the recording (a preview; transcript.md is the reference). */
+  live: (dir: string) => join(dir, 'live.jsonl'),
 };
 
 export type { Participant, SessionInfo } from '../shared/types.js';
