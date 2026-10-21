@@ -17,9 +17,9 @@ export interface MusicBrowserOptions {
   /** The capture window's page and preload (built into dist-electron/). */
   capturePage: string;
   capturePreload: string;
-  /** Each 20 ms PCM frame of the mix, while any tab is open. */
+  /** Each 20 ms PCM frame of the mix, while any tab is open or a sound plays. */
   onPcm: (pcm: Buffer) => void;
-  /** The last tab closed: playback should stop. */
+  /** Nothing left to play (no tabs, no sounds): playback should stop. */
   onSilence: () => void;
   inChannel: () => boolean;
   log: (msg: string) => void;
@@ -38,6 +38,7 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
   private activeId: string | undefined;
   private master = 1;
   private monitor = true;
+  private playingSounds: string[] = [];
   private capture!: BrowserWindow;
   private host!: BrowserWindow;
   private shown: { win: BrowserWindow; bounds: Rectangle } | undefined;
@@ -60,7 +61,15 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
       this.opts.onPcm(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
     });
     ipcMain.on('music:error', (e, id: string, message: string) => {
-      if (e.sender === this.capture.webContents) this.opts.log(`music: couldn't capture tab ${id}: ${message}`);
+      if (e.sender === this.capture.webContents) this.opts.log(`music: ${id}: ${message}`);
+    });
+    ipcMain.on('music:idle', (e) => {
+      if (e.sender === this.capture.webContents) this.opts.onSilence();
+    });
+    ipcMain.on('music:sounds', (e, ids: string[]) => {
+      if (e.sender !== this.capture.webContents) return;
+      this.playingSounds = ids;
+      this.changed();
     });
     await this.capture.loadFile(this.opts.capturePage);
   }
@@ -74,6 +83,7 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
       tabs: [...this.tabs.values()].map(
         (t): MusicTab => ({ id: t.id, title: t.title, url: t.url, volume: t.volume, muted: t.muted, audible: t.audible, active: t.id === this.activeId }),
       ),
+      playingSounds: this.playingSounds,
     };
   }
 
@@ -82,13 +92,14 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
     this.emit('status', this.status());
   }
 
-  openTab(url: string): string {
+  /** Opens a tab; a scene's tab starts silent and fades in to `volume` over `fadeMs`. */
+  openTab(url: string, fade?: { volume: number; fadeMs: number }): string {
     const id = randomUUID().slice(0, 8);
     const view = new WebContentsView({
       webPreferences: { partition: PARTITION, sandbox: true, contextIsolation: true, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
     });
     const wc = view.webContents;
-    const tab: Tab = { id, view, title: url, url, volume: 1, muted: false, audible: false };
+    const tab: Tab = { id, view, title: url, url, volume: fade?.volume ?? 1, muted: false, audible: false };
     this.tabs.set(id, tab);
     // Links that open a new window stay in this tab (logins and players work in place).
     wc.setWindowOpenHandler(({ url: target }) => {
@@ -102,7 +113,11 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
     this.host.contentView.addChildView(view);
     view.setBounds({ x: 0, y: 0, width: 1200, height: 800 });
     void wc.loadURL(url).catch((err: Error) => this.opts.log(`music: couldn't load ${url}: ${err.message}`));
-    this.capture.webContents.send('music:add', { id, mediaSourceId: wc.getMediaSourceId(this.capture.webContents), gain: 1 });
+    const mediaSourceId = wc.getMediaSourceId(this.capture.webContents);
+    this.capture.webContents.send(
+      'music:add',
+      fade && fade.fadeMs > 0 ? { id, mediaSourceId, gain: 0, fadeTo: { value: fade.volume, ms: fade.fadeMs } } : { id, mediaSourceId, gain: tab.volume },
+    );
     this.activeId = id;
     this.place();
     this.changed();
@@ -119,7 +134,6 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
     tab.view.webContents.close();
     this.tabs.delete(id);
     if (this.activeId === id) this.activeId = [...this.tabs.keys()].at(-1);
-    if (!this.tabs.size) this.opts.onSilence();
     this.place();
     this.changed();
   }
@@ -141,6 +155,46 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
     if (patch.master !== undefined) this.capture.webContents.send('music:master', (this.master = patch.master));
     if (patch.monitor !== undefined) this.capture.webContents.send('music:monitor', (this.monitor = patch.monitor));
     this.changed();
+  }
+
+  playScene(tabs: { url: string; volume: number }[], fadeMs: number): void {
+    const keep = new Set<string>();
+    let first: string | undefined;
+    for (const want of tabs) {
+      // The same page already playing carries on (e.g. rain under both "Tavern" and "Travel").
+      const same = [...this.tabs.values()].find((t) => !keep.has(t.id) && sameUrl(t.url, want.url));
+      let id: string;
+      if (same) {
+        id = same.id;
+        same.volume = want.volume;
+        same.muted = false;
+        this.fade(id, want.volume, fadeMs);
+      } else {
+        id = this.openTab(want.url, { volume: want.volume, fadeMs });
+      }
+      keep.add(id);
+      first ??= id;
+    }
+    for (const tab of [...this.tabs.values()]) {
+      if (keep.has(tab.id)) continue;
+      this.fade(tab.id, 0, fadeMs);
+      setTimeout(() => this.closeTab(tab.id), fadeMs + 200);
+    }
+    if (first) this.activeId = first;
+    this.place();
+    this.changed();
+  }
+
+  playSound(id: string, audio: Uint8Array, volume: number): void {
+    this.capture.webContents.send('music:sfx', { id, audio, gain: volume });
+  }
+
+  stopSounds(): void {
+    this.capture.webContents.send('music:sfx-stop');
+  }
+
+  private fade(id: string, value: number, ms: number): void {
+    this.capture.webContents.send('music:fade', { id, value, ms });
   }
 
   /** Shows the active tab in `win` at `bounds` (the Music page's browser area), or hides it. */
@@ -167,5 +221,13 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
       if (!parent.contentView.children.includes(tab.view)) parent.contentView.addChildView(tab.view);
       if (visible) tab.view.setBounds(this.shown!.bounds);
     }
+  }
+}
+
+function sameUrl(a: string, b: string): boolean {
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return a === b;
   }
 }

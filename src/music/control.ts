@@ -9,6 +9,14 @@ export interface MusicControl {
   closeTab(id: string): void;
   updateTab(id: string, patch: { volume?: number; muted?: boolean; active?: boolean }): void;
   update(patch: { master?: number; monitor?: boolean }): void;
+  /**
+   * Switches to a scene: its tabs fade in over `fadeMs` while the other tabs fade out and close. A
+   * tab already open on the same page stays and fades to its scene volume.
+   */
+  playScene(tabs: { url: string; volume: number }[], fadeMs: number): void;
+  /** Plays an audio file once over the music. */
+  playSound(id: string, audio: Uint8Array, volume: number): void;
+  stopSounds(): void;
   on(event: 'status', listener: (s: MusicStatus) => void): unknown;
   off(event: 'status', listener: (s: MusicStatus) => void): unknown;
 }

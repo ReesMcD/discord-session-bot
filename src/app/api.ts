@@ -13,6 +13,7 @@ import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
 import type { MusicControl, MusicStatus } from '../music/control.js';
 import { musicRoutes } from './musicRoutes.js';
+import { MusicLibrary } from '../music/library.js';
 import { UPLOAD_TOKEN_ENV, testUpload } from '../upload/recapUpload.js';
 import { configSchema } from '../config/schema.js';
 
@@ -167,7 +168,7 @@ export function createApi(opts: ApiOptions): Hono {
     }
   });
 
-  api.route('/music', musicRoutes(opts.music));
+  api.route('/music', musicRoutes(opts.music, new MusicLibrary(opts.dataDir)));
 
   // --- Config -----------------------------------------------------------------------------------
   /** Sends a test request with the upload settings given (unsaved edits included). */

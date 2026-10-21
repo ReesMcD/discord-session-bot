@@ -260,6 +260,27 @@ const TONE_PAGE = `data:text/html,${encodeURIComponent(
   '<title>tone</title><script>const c=new AudioContext();const o=c.createOscillator();const g=c.createGain();g.gain.value=0.3;o.frequency.value=440;o.connect(g).connect(c.destination);o.start();c.resume();</script>',
 )}`;
 
+/** A WAV file of a 660 Hz tone, for the smoke test's soundboard check. */
+function toneWav(seconds: number): Uint8Array {
+  const rate = 48_000;
+  const samples = rate * seconds;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(36 + samples * 2, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20); // PCM
+  wav.writeUInt16LE(1, 22); // mono
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) wav.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 660) * 12_000), 44 + i * 2);
+  return new Uint8Array(wav);
+}
+
 async function smokeTest(): Promise<void> {
   const results: Record<string, unknown> = {};
   try {
@@ -283,10 +304,20 @@ async function smokeTest(): Promise<void> {
     results.musicFrames = captured.frames;
     results.musicRms = Math.round(rms);
     results.music = captured.frames >= 50 && rms > 1000;
+    // Soundboard: a one-second effect, with no tab open, also reaches the bot, then stops.
+    await new Promise((r) => setTimeout(r, 500));
+    const before = { ...captured };
+    music.playSound('smoke', toneWav(1), 0.8);
+    await new Promise((r) => setTimeout(r, 2000));
+    const frames = captured.frames - before.frames;
+    const soundRms = Math.sqrt((captured.sumSquares - before.sumSquares) / Math.max(1, captured.samples - before.samples));
+    results.soundFrames = frames;
+    results.soundRms = Math.round(soundRms);
+    results.sound = frames >= 40 && frames <= 75 && soundRms > 1000 && music.status().playingSounds.length === 0;
   } catch (err) {
     results.error = (err as Error).message;
   }
-  const ok = results.api === 200 && results.webUi && results.ffmpeg && results.dave && results.aesGcm && results.prompts && results.tray && results.music && !results.error;
+  const ok = results.api === 200 && results.webUi && results.ffmpeg && results.dave && results.aesGcm && results.prompts && results.tray && results.music && results.sound && !results.error;
   console.log(`SMOKE ${ok ? 'PASS' : 'FAIL'} ${JSON.stringify(results)}`);
   music.close();
   await bot.shutdown();

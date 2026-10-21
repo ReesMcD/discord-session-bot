@@ -247,6 +247,26 @@ export interface MusicTab {
   active: boolean;
 }
 
+/** A saved set of tabs to switch to, crossfading. */
+export interface MusicScene {
+  id: string;
+  name: string;
+  tabs: { url: string; volume: number }[];
+}
+
+/** A soundboard effect: an audio file in <data>/music/sounds/, played once over the music. */
+export interface MusicSound {
+  id: string;
+  name: string;
+  volume: number;
+  file: string;
+}
+
+export interface MusicLibraryState {
+  scenes: MusicScene[];
+  sounds: MusicSound[];
+}
+
 export interface MusicStatus {
   /** Only the Mac app has the built-in browser; `npm run app` reports false. */
   available: boolean;
@@ -257,4 +277,6 @@ export interface MusicStatus {
   /** Also play the mix on this Mac (capturing a tab silences it locally otherwise). */
   monitor: boolean;
   tabs: MusicTab[];
+  /** Soundboard effects playing now (their IDs). */
+  playingSounds: string[];
 }

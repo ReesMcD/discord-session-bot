@@ -15,7 +15,7 @@ terminal steps below:
 - **Keys:** the app's welcome screen takes them.
 - **Recording test (2.3):** menu bar → **Join & Record ▸** your channel. Talk for 20 minutes, with someone leaving and rejoining, then **Stop Recording**.
 - **Checking it:** the session opens in the app, with its transcript (and recap) produced automatically.
-- **Music:** while recording, open the **Music** tab, paste a YouTube link and press play in the browser below. Everyone in the channel should hear it. Try the volume slider, **Mute**, a second tab at once, and closing a tab. Check the recording doesn't contain the music.
+- **Music:** while recording, open the **Music** tab, paste a YouTube link and press play in the browser below. Everyone in the channel should hear it. Try the volume slider, **Mute**, a second tab at once, and closing a tab. Check the recording doesn't contain the music. Save the tabs as a scene, open a different page, then tap the scene: it should crossfade back. Add a sound effect and tap it over the music.
 - **Audio:** for a listen-back check, the files are under `~/Library/Application Support/Session Bot/data/sessions/<session>/audio/`.
 
 The pass criteria in 2.3 are the same. If something fails, send the session's folder name and
