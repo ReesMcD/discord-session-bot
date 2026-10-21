@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ChannelType, Client, Events, GatewayIntentBits, type VoiceBasedChannel } from 'discord.js';
+import { ChannelType, Client, DiscordAPIError, Events, GatewayIntentBits, MessageFlags, type ChatInputCommandInteraction, type Guild, type VoiceBasedChannel } from 'discord.js';
+import { COMMANDS, inviteUrl, runCommand, type CommandName } from './commands.js';
 import { loadConfig } from '../config/load.js';
 import { listUtterances, paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { SessionRecorder } from '../recording/SessionRecorder.js';
@@ -65,6 +66,9 @@ export class BotService extends EventEmitter implements BotControl {
   private lastEmit = 0;
   private emitTimer: NodeJS.Timeout | undefined;
   private readonly log: (msg: string) => void;
+  /** Servers that refused the slash commands (bot added without applications.commands). */
+  private readonly commandsRefused = new Set<string>();
+  private commandsReady = false;
 
   constructor(private readonly opts: BotServiceOptions) {
     super();
@@ -87,6 +91,8 @@ export class BotService extends EventEmitter implements BotControl {
       ...(this.client?.user ? { user: this.client.user.tag } : {}),
       ...(this.error ? { error: this.error } : {}),
       recording: this.recorder?.status() ?? null,
+      ...(this.commandsReady ? { commands: this.commandsRefused.size ? 'needs-invite' : 'ready' } : {}),
+      ...(this.commandsRefused.size && this.client?.application ? { inviteUrl: inviteUrl(this.client.application.id) } : {}),
     };
   }
 
@@ -98,6 +104,11 @@ export class BotService extends EventEmitter implements BotControl {
     client.on(Events.ClientReady, (c) => {
       this.log(`logged in as ${c.user.tag}`);
       this.setState('ready');
+      void Promise.all([...c.guilds.cache.values()].map((g) => this.registerCommands(g))).then(() => ((this.commandsReady = true), this.emitStatus(true)));
+    });
+    client.on(Events.GuildCreate, (g) => void this.registerCommands(g).then(() => this.emitStatus(true)));
+    client.on(Events.InteractionCreate, (i) => {
+      if (i.isChatInputCommand()) void this.answer(i);
     });
     client.on(Events.VoiceStateUpdate, () => this.emitStatus());
     client.on(Events.Error, (err) => this.log(`discord error: ${err.message}`));
@@ -110,6 +121,39 @@ export class BotService extends EventEmitter implements BotControl {
       this.error = /token/i.test((err as Error).message) ? 'Discord rejected the bot token' : (err as Error).message;
       this.setState('error');
       throw err;
+    }
+  }
+
+  /** Registers /record, /stop and /status in a server (per server, so they appear at once). */
+  private async registerCommands(guild: Guild): Promise<void> {
+    try {
+      await guild.commands.set(COMMANDS);
+      this.commandsRefused.delete(guild.id);
+    } catch (err) {
+      if (err instanceof DiscordAPIError && err.code === 50001) {
+        this.commandsRefused.add(guild.id);
+        this.log(`slash commands: ${guild.name} needs the bot re-added with the applications.commands scope (see the Record page)`);
+      } else {
+        this.log(`slash commands: couldn't register in ${guild.name}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  private async answer(i: ChatInputCommandInteraction): Promise<void> {
+    if (!i.inGuild()) return;
+    try {
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
+      const channelId = i.options.getChannel('channel')?.id;
+      const memberVoiceChannelId = i.guild?.voiceStates.cache.get(i.user.id)?.channelId ?? undefined;
+      const afterStop = this.configStore?.read().config?.recording.after_stop;
+      const reply = await runCommand(
+        { name: i.commandName as CommandName, guildId: i.guildId, ...(channelId ? { channelId } : {}), ...(memberVoiceChannelId ? { memberVoiceChannelId } : {}), ...(afterStop ? { afterStop } : {}) },
+        this,
+      );
+      this.log(`/${i.commandName} by ${i.user.tag}`);
+      await i.editReply(reply);
+    } catch (err) {
+      this.log(`/${i.commandName}: ${(err as Error).message}`);
     }
   }
 

@@ -217,6 +217,12 @@ export interface BotStatus {
   user?: string;
   error?: string;
   recording: RecordingStatus | null;
+  /**
+   * Slash commands: registered in every server, or a server refused them because the bot was added
+   * without the applications.commands scope; `inviteUrl` re-adds it with everything it needs.
+   */
+  commands?: 'ready' | 'needs-invite';
+  inviteUrl?: string;
 }
 
 export interface VoiceChannelInfo {

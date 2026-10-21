@@ -53,7 +53,7 @@ run → Artifacts**, and you need to be signed in to GitHub to download it. Tagg
 | Play music into the voice channel from a built-in browser (like Kenku FM) | The Mac app's **Music** tab; volume and tabs from the phone too | Ready, awaiting a live test |
 | Import a [Craig](https://craig.chat) recording | `npm run import:craig` | Ready |
 | Web app on your phone | Tailscale → `http://<Mac name>:4400` | Ready |
-| Discord slash commands (`/record`, `/stop`) | none yet | Planned; the menu bar does this for now |
+| Discord slash commands (`/record`, `/stop`, `/status`) | In your server, while the app runs | Ready, awaiting a live test |
 | Auto-publishing (e.g. to GitHub) | none yet | Phase 3 |
 
 **Testing on a Mac with Claude Code?** Follow [TESTING.md](TESTING.md).
@@ -104,8 +104,11 @@ You only need the keys for the steps you'll use.
    Treat it like a password. If it leaks, reset it here.
 3. The bot needs no privileged intents. Leave **Presence**, **Server Members** and **Message Content** off.
 4. Open **OAuth2 → URL Generator**:
-   - **Scopes:** `bot`
-   - **Bot permissions:** **View Channels**, **Connect**, **Send Messages**, **Attach Files**
+   - **Scopes:** `bot` and `applications.commands` (for `/record`, `/stop` and `/status`)
+   - **Bot permissions:** **View Channels**, **Connect**, **Speak** (to play music), **Send Messages**, **Attach Files**
+
+   Added the bot before slash commands existed? The app's Record page shows a **Re-add the bot**
+   link with all of this filled in. Adding it again keeps everything.
 5. Open the generated URL in your browser and add the bot to your server.
 6. In the Discord app, turn on **User Settings → Advanced → Developer Mode**. Now you can right-click things and choose **Copy ID**:
    - the **voice channel** you want to record: you'll pass this to the recorder;
@@ -388,6 +391,10 @@ What's in it:
 
   Saving keeps the comments in `config.yaml`.
 - **Record**: pick a voice channel and **Join & record**, with a live view of who's being recorded, and **Stop**.
+  The same works from Discord while the app runs: `/record` (the voice channel you're in, or pick
+  one), `/stop` and `/status`. Replies are visible only to you. `/record` and `/stop` are for
+  people with **Manage Server** by default; to let a role use them, open Server Settings →
+  Integrations → the bot. `/status` is open to everyone, so anyone can check they're being recorded.
 - **Music** (Mac app only): paste a link (YouTube, Tabletop Audio, any web page with sound) and it opens
   in a built-in browser tab. Each tab's sound is mixed and played into the voice channel by the same
   bot that records, so there's no second bot. Several tabs can play at once, each with its own
