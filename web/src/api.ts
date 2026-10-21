@@ -1,4 +1,4 @@
-import type { BotStatus, Job } from './types';
+import type { BotStatus, Job, MusicStatus } from './types';
 
 // Same-origin by default; set VITE_API_URL when the UI is hosted elsewhere (e.g. Vercel).
 const BASE = `${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api`;
@@ -79,7 +79,7 @@ export async function downloadFile(sessionId: string, name: string): Promise<voi
   URL.revokeObjectURL(url);
 }
 
-type Listener = { onJob?: (job: Job) => void; onBot?: (status: BotStatus) => void };
+type Listener = { onJob?: (job: Job) => void; onBot?: (status: BotStatus) => void; onMusic?: (status: MusicStatus) => void };
 const listeners = new Set<Listener>();
 let stopStream: (() => void) | undefined;
 
@@ -113,6 +113,7 @@ function startStream(): () => void {
             if (!data) continue;
             if (event === 'job') listeners.forEach((l) => l.onJob?.(JSON.parse(data) as Job));
             if (event === 'bot') listeners.forEach((l) => l.onBot?.(JSON.parse(data) as BotStatus));
+            if (event === 'music') listeners.forEach((l) => l.onMusic?.(JSON.parse(data) as MusicStatus));
           }
         }
       } catch {

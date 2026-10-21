@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, auth, subscribe } from './api';
-import { CampaignsIcon, OrbMark, RecordIcon, SessionsIcon, SettingsIcon } from './icons';
+import { CampaignsIcon, MusicIcon, OrbMark, RecordIcon, SessionsIcon, SettingsIcon } from './icons';
+import { MusicPage } from './pages/MusicPage';
 import type { BotStatus } from './types';
 import { href, useRoute } from './router';
 import { SessionsPage } from './pages/SessionsPage';
@@ -19,6 +20,7 @@ export function App() {
 
 const NAV = [
   { key: 'record', label: 'Record', Icon: RecordIcon },
+  { key: 'music', label: 'Music', Icon: MusicIcon },
   { key: 'sessions', label: 'Sessions', Icon: SessionsIcon },
   { key: 'settings', label: 'Settings', Icon: SettingsIcon },
 ];
@@ -35,7 +37,7 @@ function Shell({ route }: { route: string[] }) {
           <OrbMark /> Scrying Eye
         </a>
         <nav className="side-nav" aria-label="Main">
-          {NAV.slice(0, 2).map(({ key, label, Icon }) => (
+          {NAV.slice(0, 3).map(({ key, label, Icon }) => (
             <a key={key} href={href(key)} className={page === key ? 'on' : ''} aria-current={page === key ? 'page' : undefined}>
               <Icon /> {label}
             </a>
@@ -68,7 +70,8 @@ function Shell({ route }: { route: string[] }) {
           {page === 'sessions' && id && <SessionPage id={id} />}
           {page === 'settings' && <SettingsPage initial={id} />}
           {page === 'record' && <RecordPage />}
-          {!['sessions', 'settings', 'record'].includes(page) && <SessionsPage />}
+          {page === 'music' && <MusicPage />}
+          {!['sessions', 'settings', 'record', 'music'].includes(page) && <SessionsPage />}
         </main>
         <nav className="tabbar" aria-label="Main">
           {NAV.map(({ key, label, Icon }) => (

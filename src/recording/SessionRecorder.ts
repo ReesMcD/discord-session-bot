@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, type VoiceConnection } from '@discordjs/voice';
+import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, type AudioPlayer, type VoiceConnection } from '@discordjs/voice';
 import type { Guild, VoiceBasedChannel } from 'discord.js';
 import { paths, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { RecordingStatus } from '../bot/types.js';
@@ -21,6 +21,8 @@ export interface SessionRecorderOptions {
   debug?: (msg: string) => void;
   /** Written to session.json; "bot" sessions are recovered by the app after a crash. */
   source?: string;
+  /** Join muted (default). The app's bot joins unmuted so it can also play music. */
+  selfMute?: boolean;
 }
 
 interface ParticipantState {
@@ -89,7 +91,7 @@ export class SessionRecorder extends EventEmitter {
       guildId: guild.id,
       adapterCreator: guild.voiceAdapterCreator,
       selfDeaf: false,
-      selfMute: true,
+      selfMute: this.opts.selfMute ?? true,
       debug: !!this.opts.debug,
     });
     this.connection = connection;
@@ -102,6 +104,11 @@ export class SessionRecorder extends EventEmitter {
     }
     this.setState('recording');
     this.log(`Recording #${channel.name} in ${guild.name} → ${this.opts.sessionId}`);
+  }
+
+  /** Plays this player's audio into the channel, on the same connection the recording uses. */
+  play(player: AudioPlayer): void {
+    this.connection?.subscribe(player);
   }
 
   async stop(): Promise<void> {

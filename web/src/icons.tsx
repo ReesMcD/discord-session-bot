@@ -33,6 +33,13 @@ export const SessionsIcon = icon(
     <path d="M9.5 11h6M9.5 15h6" />
   </>,
 );
+export const MusicIcon = icon(
+  <>
+    <path d="M9 18V5l11-2v13" />
+    <circle cx="6" cy="18" r="3" />
+    <circle cx="17" cy="16" r="3" />
+  </>,
+);
 export const CampaignsIcon = icon(<path d="M4 6l8-3 8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9z" />);
 export const SettingsIcon = icon(
   <>

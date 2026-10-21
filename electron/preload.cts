@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld('sessionBot', {
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   dataFolder: () => ipcRenderer.invoke('data-folder'),
   revealDataFolder: () => ipcRenderer.invoke('reveal-data-folder'),
+  /** Where the Music page's browser area is (CSS pixels in the window), or null when it's not shown. */
+  showMusicTab: (bounds: { x: number; y: number; width: number; height: number } | null) => ipcRenderer.send('music:view', bounds),
 });

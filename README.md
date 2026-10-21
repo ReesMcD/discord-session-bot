@@ -50,6 +50,7 @@ run → Artifacts**, and you need to be signed in to GitHub to download it. Tagg
 | Session recap (Claude): NPCs, locations, what happened, combat with kill count | **Write recap** button (or automatic), or `npm run summarize` | Ready |
 | Edit, add to and copy the recap | The session's **Recap** tab | Ready |
 | Upload the recap to a wiki | none yet | Planned ([#5](https://github.com/ReesMcD/discord-session-bot/issues/5)) |
+| Play music into the voice channel from a built-in browser (like Kenku FM) | The Mac app's **Music** tab; volume and tabs from the phone too | Ready, awaiting a live test |
 | Import a [Craig](https://craig.chat) recording | `npm run import:craig` | Ready |
 | Web app on your phone | Tailscale → `http://<Mac name>:4400` | Ready |
 | Discord slash commands (`/record`, `/stop`) | none yet | Planned; the menu bar does this for now |
@@ -382,6 +383,14 @@ What's in it:
 
   Saving keeps the comments in `config.yaml`.
 - **Record**: pick a voice channel and **Join & record**, with a live view of who's being recorded, and **Stop**.
+- **Music** (Mac app only): paste a link (YouTube, Tabletop Audio, any web page with sound) and it opens
+  in a built-in browser tab. Each tab's sound is mixed and played into the voice channel by the same
+  bot that records, so there's no second bot. Several tabs can play at once, each with its own
+  volume and mute, plus a master volume. The bot only plays while it's in a channel, so start a
+  recording first. The browser itself shows on the Mac; from the phone you can open, mute, change
+  volume and close tabs. *Also play on this Mac* lets you hear the mix locally (capturing a tab
+  silences it on the Mac otherwise). Spotify won't play: its web player needs DRM (Widevine), which
+  the app's browser doesn't include. The bot's own audio isn't recorded.
 
 **Security:** the app controls a bot that records people, so it always needs the password, and it
 only answers this Mac and your Tailscale devices. Other devices on your Wi-Fi get "forbidden" (set
