@@ -72,6 +72,24 @@ test('recovered recordings are queued for processing according to after_stop', a
   await assert.rejects(bot.join('123456789012345678'), /not connected/);
 });
 
+test('with upload.auto on, the recap is uploaded after it is written; off by default', async () => {
+  for (const [yaml, expected] of [
+    ['recording:\n  after_stop: summarize\nupload:\n  url: https://wiki.example/r\n  auto: true\n', ['transcribe', 'summarize', 'upload']],
+    ['recording:\n  after_stop: summarize\nupload:\n  url: https://wiki.example/r\n', ['transcribe', 'summarize']],
+  ] as const) {
+    const root = mkdtempSync(join(tmpdir(), 'rec-'));
+    const dataDir = join(root, 'data');
+    interruptedSession(dataDir, 'crashed');
+    const configPath = join(root, 'config.yaml');
+    writeFileSync(configPath, yaml);
+    const steps: string[] = [];
+    const jobs = new JobRunner(async (job: Job) => void steps.push(job.step));
+    new BotService({ dataDir, configPath, log: () => {} }).attachJobs(jobs, new ConfigStore(configPath));
+    await jobs.idle();
+    assert.deepEqual(steps, expected);
+  }
+});
+
 test('when transcription fails, the queued recap is skipped with the reason instead of failing confusingly', async () => {
   const root = mkdtempSync(join(tmpdir(), 'rec-'));
   const dataDir = join(root, 'data');

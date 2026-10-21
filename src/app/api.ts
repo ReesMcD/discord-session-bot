@@ -12,6 +12,8 @@ import { saveRecapEdit } from '../summary/recapEdits.js';
 import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
 import { normalizeUrl, type MusicControl, type MusicStatus } from '../music/control.js';
+import { UPLOAD_TOKEN_ENV, testUpload } from '../upload/recapUpload.js';
+import { configSchema } from '../config/schema.js';
 
 export interface ApiOptions {
   password: PasswordSource;
@@ -26,11 +28,13 @@ export interface ApiOptions {
   bot?: BotControl;
   /** The Mac app's music browser; absent under `npm run app`. */
   music?: MusicControl;
+  /** For tests: the HTTP client the upload test uses. */
+  uploadFetch?: typeof fetch;
   /** Throttles wrong passwords (tests pass their own clock). */
   signInLimiter?: SignInLimiter;
 }
 
-const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize'];
+const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize', 'upload'];
 
 export function createApi(opts: ApiOptions): Hono {
   const api = new Hono();
@@ -203,6 +207,15 @@ export function createApi(opts: ApiOptions): Hono {
   });
 
   // --- Config -----------------------------------------------------------------------------------
+  /** Sends a test request with the upload settings given (unsaved edits included). */
+  api.post('/upload/test', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { upload?: unknown };
+    const parsed = configSchema.shape.upload.safeParse(body.upload ?? {});
+    if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? 'invalid upload settings' }, 400);
+    if (!parsed.data.url) return c.json({ error: 'Set the address first' }, 400);
+    return c.json(await testUpload(parsed.data, process.env[UPLOAD_TOKEN_ENV], opts.uploadFetch));
+  });
+
   api.get('/config', (c) => c.json(opts.configStore.read()));
 
   api.put('/config', async (c) => {

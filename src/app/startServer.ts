@@ -13,6 +13,7 @@ import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
 import { PROVIDERS } from '../transcription/openaiCompatible.js';
 import type { BotService } from '../bot/BotService.js';
+import { UPLOAD_TOKEN_ENV } from '../upload/recapUpload.js';
 import type { MusicControl } from '../music/control.js';
 
 export interface ServerOptions {
@@ -81,6 +82,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
           discord: !!process.env.DISCORD_TOKEN,
           transcription: !!(process.env.TRANSCRIBE_API_KEY || process.env[PROVIDERS[provider].keyEnv]),
           anthropic: !!process.env.ANTHROPIC_API_KEY,
+          upload: !!process.env[UPLOAD_TOKEN_ENV],
         };
       },
     }),

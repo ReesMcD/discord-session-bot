@@ -5,6 +5,8 @@ export interface Secrets {
   discord?: string;
   groq?: string;
   anthropic?: string;
+  /** Key for the recap upload endpoint (config: upload). */
+  wiki?: string;
   /** Password for the web app (the Mac window signs in automatically; phones need it). */
   password: string;
 }
@@ -66,4 +68,5 @@ export function applyToEnv(s: Secrets, env: NodeJS.ProcessEnv = process.env): vo
   set('DISCORD_TOKEN', s.discord);
   set('GROQ_API_KEY', s.groq);
   set('ANTHROPIC_API_KEY', s.anthropic);
+  set('WIKI_UPLOAD_TOKEN', s.wiki);
 }

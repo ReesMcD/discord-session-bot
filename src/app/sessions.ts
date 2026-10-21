@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { listUtterances, paths, readJson, readParticipants, readSessionInfo, type Participant, type SessionInfo } from '../session/layout.js';
 import type { TranscriptLine } from '../transcript/merge.js';
 import { readEditState, recapState, type RecapState } from '../summary/recapEdits.js';
+import { uploadStatus } from '../upload/recapUpload.js';
 import { summaryPaths, type SummaryMeta } from '../summary/summarizeSession.js';
 import type { Person, SessionDetail, SessionSummary } from '../shared/types.js';
 import type { Config } from '../config/schema.js';
@@ -80,6 +81,8 @@ export function sessionDetail(dataDir: string, id: string, config: Config | null
     summaryMeta: readJson<SummaryMeta>(summaryPaths.meta(dir)) ?? null,
     recapState: recapState(dir),
     editedAt: readEditState(dir)?.editedAt ?? null,
+    upload: uploadStatus(dir),
+    uploadTo: config?.upload.url ? new URL(config.upload.url).host : null,
     unpaired: pendingUnpaired(dir, config),
   };
 }

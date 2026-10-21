@@ -16,6 +16,7 @@ const KEY_FIELDS = [
     hint: 'platform.claude.com/settings/keys → Create key (starts with sk-ant-)',
     url: 'https://platform.claude.com/settings/keys',
   },
+  { key: 'wiki', label: 'Wiki upload key (optional)', hint: 'Only if your upload endpoint needs one: the token or API key it gave you. The address is under Settings → Upload.', optional: true },
 ] as const;
 
 /** Mac app only: keys are stored in the Keychain by the app, never sent to the web API. */
@@ -47,7 +48,7 @@ export function KeysSection() {
     setSaved(await bridge.getKeys());
   };
 
-  const missing = KEY_FIELDS.filter((f) => !saved[f.key]);
+  const missing = KEY_FIELDS.filter((f) => !('optional' in f) && !saved[f.key]);
   return (
     <div>
       {missing.length > 0 && (
@@ -67,9 +68,11 @@ export function KeysSection() {
             hint={
               <>
                 {f.hint}{' '}
-                <button type="button" className="link" onClick={() => void bridge.openExternal(f.url)}>
-                  Open ↗
-                </button>
+                {'url' in f && (
+                  <button type="button" className="link" onClick={() => void bridge.openExternal(f.url)}>
+                    Open ↗
+                  </button>
+                )}
               </>
             }
           >

@@ -80,3 +80,13 @@ summary:
   synthesize_effort: high
   fallbacks: true             # if Claude declines a request, retry it on Anthropic's recommended fallback model
   # prompts_dir: ./my-prompts # cleanup.md, extract.md, synthesize.md, audit.md, revise.md here override the built-ins
+
+# Send recaps to your wiki (or anything that takes a web request). The key, if it needs one, is
+# WIKI_UPLOAD_TOKEN in .env (Settings → Keys in the Mac app), never here.
+upload:
+  # url: https://wiki.example.com/api/recaps   # empty = uploading off
+  method: POST                # POST | PUT
+  format: json                # json | markdown (the recap with YAML front matter)
+  auth: bearer                # bearer | header (header_name: <key>) | none
+  header_name: X-Api-Key
+  auto: false                 # upload right after a recording's recap is written

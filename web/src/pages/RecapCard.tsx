@@ -10,7 +10,19 @@ import { Badge } from '../ui';
 const DEFAULT_SECTIONS = ['NPCs', 'Locations', 'What happened', 'Combat'];
 
 /** The recap: read, copy, add a note to a section, or edit the Markdown. */
-export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: string }; onSaved: (d: SessionDetail) => void; busy: boolean }) {
+export function RecapCard({
+  s,
+  onSaved,
+  busy,
+  uploading,
+  onUpload,
+}: {
+  s: SessionDetail & { summary: string };
+  onSaved: (d: SessionDetail) => void;
+  busy: boolean;
+  uploading: boolean;
+  onUpload: () => void;
+}) {
   const [mode, setMode] = useState<'read' | 'edit'>('read');
   const [draft, setDraft] = useState('');
   const [preview, setPreview] = useState(false);
@@ -19,6 +31,7 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmUpload, setConfirmUpload] = useState(false);
 
   const { body } = splitHeader(s.summary);
   const sections = [...new Set([...sectionsOf(s.summary), ...DEFAULT_SECTIONS])];
@@ -80,11 +93,31 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
               <button className="link" onClick={() => downloadFile(s.id, 'summary.md')}>
                 Download
               </button>
+              {s.uploadTo && (
+                <button className={s.upload && !s.upload.changedSince ? '' : 'primary'} disabled={busy || uploading} onClick={() => setConfirmUpload(true)}>
+                  {uploading ? 'Uploading…' : s.upload ? 'Upload again' : 'Upload to wiki'}
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
       {error && <div className="error-box">{error}</div>}
+      {s.upload && mode === 'read' && <UploadLine upload={s.upload} />}
+      {confirmUpload && mode === 'read' && (
+        <div className="card upload-confirm" role="dialog" aria-label="Upload the recap">
+          <span>
+            Send this recap{s.recapState === 'edited' ? ', with your edits,' : ''} to <strong>{s.uploadTo}</strong>?
+            {s.upload && !s.upload.changedSince && <span className="muted"> It hasn't changed since the last upload.</span>}
+          </span>
+          <div className="row">
+            <button onClick={() => setConfirmUpload(false)}>Cancel</button>
+            <button className="primary" onClick={() => (setConfirmUpload(false), onUpload())}>
+              Upload
+            </button>
+          </div>
+        </div>
+      )}
 
       {mode === 'edit' ? (
         <div className="card">
@@ -130,6 +163,21 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/** "Uploaded 5 min ago · Open page", flagged when the recap changed since. */
+function UploadLine({ upload }: { upload: NonNullable<SessionDetail['upload']> }) {
+  return (
+    <div className="row small upload-line">
+      <span className="muted">Uploaded {when(Date.parse(upload.uploadedAt))}</span>
+      {upload.changedSince && <Badge tone="warn">edited since</Badge>}
+      {upload.url && (
+        <a href={upload.url} target="_blank" rel="noreferrer">
+          Open page ↗
+        </a>
       )}
     </div>
   );
