@@ -382,8 +382,11 @@ What's in it:
   - **Recording & people**: pick people to ignore or name from anyone seen in past recordings, and turn on *Shared account* for a Discord account several people use.
   - **Campaigns**: per voice channel, the campaign's name, background and who plays which character.
   - **Recap**: extra sections, detail level, and the clean-up and audit steps.
-  - **Upload**: where recaps are sent (your wiki's endpoint), how (POST or PUT, JSON or a Markdown
-    file) and the kind of key. The key itself is `WIKI_UPLOAD_TOKEN` in `.env`, or Settings → Keys in
+  - **Upload**: where recaps are sent. Pick **Ardent Weave wiki** for The Ardent Weave
+    (ReesMcD/dnd-wiki): the address is `https://<your wiki>.vercel.app/api/sessions`, the key is the
+    wiki's `SESSION_INGEST_TOKEN`, and each campaign's name here must match the wiki's. Each upload
+    becomes a **Session Recap NNN** page (plus the transcript as a DM-only log), ready for "process
+    session" in Claude. For anything else: POST or PUT, JSON or a Markdown file, and the kind of key. The key itself is `WIKI_UPLOAD_TOKEN` in `.env`, or Settings → Keys in
     the Mac app. **Test connection** checks it, and *What your endpoint receives* shows the exact
     request. Uploading a session again sends the same `id`, so the endpoint can update the page.
   - **Transcription**: the rest of the options, including the **live transcript**: lines appear on the

@@ -4,7 +4,9 @@ You are writing the recap of a tabletop role-playing session (for example D&D) p
 
 ## Structure
 
-Write these `##` sections in this order. Leave out a section that has nothing in it rather than writing "none".
+Start with one line in bold: the session in a single sentence of at most 25 words, naming the main thing that happened and where (for example `**The party reached Vallaki, met the Baron and agreed to find the missing icon.**`). Nothing comes before it.
+
+Then write these `##` sections in this order. Leave out a section that has nothing in it rather than writing "none".
 
 1. `## NPCs`: one bullet per non-player character, `- **Name**: who they are and what happened with them`. Use sub-bullets when there are several points. Merge notes about the same character from different sections, including spelling variants of the same name. Playable characters are never NPCs.
 2. `## Locations`: the same format, one bullet per place.

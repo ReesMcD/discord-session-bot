@@ -155,8 +155,11 @@ export const configSchema = z
         /** Where the recap is sent. Empty = uploading is off. */
         url: z.url({ protocol: /^https?$/ }).optional(),
         method: z.enum(['POST', 'PUT']).default('POST'),
-        /** json: { id, title, date, campaign, markdown, … }; markdown: the recap with YAML front matter. */
-        format: z.enum(['json', 'markdown']).default('json'),
+        /**
+         * json: { id, title, date, campaign, markdown, … }; markdown: the recap with YAML front matter;
+         * ardent-weave: the Ardent Weave wiki's /api/sessions (a Session Recap page plus the transcript).
+         */
+        format: z.enum(['json', 'markdown', 'ardent-weave']).default('json'),
         /** bearer: "Authorization: Bearer <key>"; header: "<header_name>: <key>"; none: no key. */
         auth: z.enum(['bearer', 'header', 'none']).default('bearer'),
         header_name: z.string().regex(/^[A-Za-z0-9-]+$/, 'letters, digits and dashes only').default('X-Api-Key'),

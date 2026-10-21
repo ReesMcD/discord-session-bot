@@ -143,9 +143,16 @@ export function RecapCard({
         </div>
       ) : (
         <>
-          {splitSections(body).map((section, i) => (
-            <RecapSectionCard key={`${section.title}-${i}`} title={section.title} body={section.body} />
-          ))}
+          {splitSections(body).map((section, i) =>
+            // Text before the first section is the recap's one-line summary.
+            section.title ? (
+              <RecapSectionCard key={`${section.title}-${i}`} title={section.title} body={section.body} />
+            ) : (
+              <div key={`lead-${i}`} className="recap-lead">
+                <Markdown source={section.body} />
+              </div>
+            ),
+          )}
           <div className="add-note card">
             <select value={target} onChange={(e) => setSection(e.target.value)} aria-label="Section">
               {sections.map((x) => (
