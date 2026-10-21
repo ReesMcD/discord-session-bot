@@ -34,3 +34,38 @@ export function appendToSection(md: string, section: string, note: string): stri
   const rest = md.slice(end);
   return `${md.slice(0, end).trimEnd()}\n${bullet}\n${rest ? `\n${rest}` : ''}`;
 }
+
+export interface RecapSection {
+  /** The `## ` heading, or '' for anything before the first heading. */
+  title: string;
+  body: string;
+}
+
+/** Splits a recap body into its `## ` sections, so each can be shown as a card. */
+export function splitSections(body: string): RecapSection[] {
+  const out: RecapSection[] = [];
+  let current: RecapSection = { title: '', body: '' };
+  for (const line of body.split('\n')) {
+    const heading = /^##[ \t]+(.+?)[ \t]*$/.exec(line);
+    if (heading) {
+      if (current.title || current.body.trim()) out.push(current);
+      current = { title: heading[1]!, body: '' };
+    } else {
+      current.body += `${line}\n`;
+    }
+  }
+  if (current.title || current.body.trim()) out.push(current);
+  return out.map((s) => ({ ...s, body: s.body.trim() }));
+}
+
+/** Pulls the "- **Kill count:** Thorin 2, Elara 1" line out of a section, as [name, kills] pairs. */
+export function takeKillCount(body: string): { rest: string; kills: [string, number][] } {
+  const m = /^[-*]\s+\*\*Kill count:?\*\*\s*(.+)$/im.exec(body);
+  if (!m) return { rest: body, kills: [] };
+  const kills = m[1]!
+    .split(',')
+    .map((part) => /^(.*\S)\s+(\d+)$/.exec(part.trim()))
+    .filter((x): x is RegExpExecArray => !!x)
+    .map((x): [string, number] => [x[1]!, Number(x[2])]);
+  return { rest: body.replace(m[0], '').replace(/\n{3,}/g, '\n\n').trim(), kills };
+}

@@ -3,7 +3,7 @@ import { api, downloadFile } from '../api';
 import { copyText } from '../clipboard';
 import { when } from '../format';
 import { Markdown } from '../Markdown';
-import { appendToSection, sectionsOf, splitHeader } from '../recap';
+import { appendToSection, sectionsOf, splitHeader, splitSections, takeKillCount } from '../recap';
 import type { SessionDetail } from '../types';
 import { Badge } from '../ui';
 
@@ -61,8 +61,8 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
   const meta = s.summaryMeta;
   const n = meta?.notes;
   return (
-    <div className="card">
-      <div className="row spread" style={{ marginBottom: 8 }}>
+    <div>
+      <div className="row spread recap-toolbar">
         <span className="muted small">
           {s.recapState === 'edited' ? <Badge tone="accent">edited{s.editedAt ? ` ${when(Date.parse(s.editedAt))}` : ''}</Badge> : <Badge>generated</Badge>}{' '}
           {n && `${n.npcs} NPC · ${n.locations} location · ${n.combats} fight notes`}
@@ -87,7 +87,7 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
       {error && <div className="error-box">{error}</div>}
 
       {mode === 'edit' ? (
-        <div>
+        <div className="card">
           <div className="row spread" style={{ marginBottom: 8 }}>
             <div className="segmented" role="radiogroup">
               <button type="button" role="radio" aria-checked={!preview} className={preview ? '' : 'on'} onClick={() => setPreview(false)}>
@@ -110,8 +110,10 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
         </div>
       ) : (
         <>
-          <Markdown source={body} />
-          <div className="add-note">
+          {splitSections(body).map((section, i) => (
+            <RecapSectionCard key={`${section.title}-${i}`} title={section.title} body={section.body} />
+          ))}
+          <div className="add-note card">
             <select value={target} onChange={(e) => setSection(e.target.value)} aria-label="Section">
               {sections.map((x) => (
                 <option key={x}>{x}</option>
@@ -130,5 +132,26 @@ export function RecapCard({ s, onSaved, busy }: { s: SessionDetail & { summary: 
         </>
       )}
     </div>
+  );
+}
+
+/** One recap section as a card; Combat's kill count becomes pills. */
+function RecapSectionCard({ title, body }: { title: string; body: string }) {
+  const { rest, kills } = takeKillCount(body);
+  return (
+    <section className="card recap-section">
+      {title && <h2 className="recap-heading">{title}</h2>}
+      {rest && <Markdown source={rest} />}
+      {kills.length > 0 && (
+        <div className="kill-pills" aria-label="Kill count">
+          <span className="eyebrow">Kills</span>
+          {kills.map(([name, n]) => (
+            <span key={name} className="badge gold">
+              {name} · {n}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

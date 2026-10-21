@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, subscribe } from '../api';
-import { hms } from '../format';
+import { hms, speakerHue } from '../format';
 import { href } from '../router';
 import type { BotStatus, GuildInfo, RecordingStatus } from '../types';
 import { Badge, Empty } from '../ui';
@@ -84,7 +84,9 @@ export function RecordPage() {
                 <div className="card" key={c.id}>
                   <div className="row spread">
                     <div>
-                      <strong>🔊 {c.name}</strong>
+                      <strong className="row" style={{ gap: 6 }}>
+                        <SpeakerIcon /> {c.name}
+                      </strong>
                       <div className="muted small">{c.members.length ? c.members.map((m) => m.name + (m.bot ? ' (bot)' : '')).join(', ') : 'Nobody here'}</div>
                     </div>
                     <button className={c.members.length ? 'primary' : ''} disabled={!!busy} onClick={() => join(c.id)}>
@@ -96,6 +98,15 @@ export function RecordPage() {
         </>
       )}
     </div>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ color: 'var(--accent)' }}>
+      <path d="M4 9h4l5-4v14l-5-4H4z" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+    </svg>
   );
 }
 
@@ -128,38 +139,57 @@ function Recording({ rec, onStop, stopping }: { rec: RecordingStatus; onStop: ()
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+  const label = rec.state === 'recording' ? 'recording' : rec.state === 'reconnecting' ? 'reconnecting…' : rec.state === 'connecting' ? 'connecting…' : 'stopping…';
   return (
-    <div className="card recording">
-      <div className="row spread">
-        <div>
-          <div className="row">
-            <span className="rec-dot" /> <strong>{rec.state === 'recording' ? 'Recording' : rec.state === 'reconnecting' ? 'Reconnecting…' : rec.state === 'connecting' ? 'Connecting…' : 'Stopping…'}</strong>
-            {rec.reconnects > 0 && <Badge tone="warn">{rec.reconnects} reconnect{rec.reconnects === 1 ? '' : 's'}</Badge>}
-          </div>
-          <div className="muted small">
-            #{rec.channelName} · {rec.guildName}
+    <div className="recording-view">
+      <section className="orb-wrap" aria-label="Recording">
+        <div className={`orb ${rec.state}`}>
+          <span className="orb-ring outer" />
+          <span className="orb-ring middle" />
+          <span className="orb-core" />
+          <div className="orb-text">
+            <span className="orb-time">{hms(now - rec.startedAt)}</span>
+            <span className="orb-label">{label}</span>
           </div>
         </div>
-        <div className="elapsed">{hms(now - rec.startedAt)}</div>
-      </div>
-      <h3>Being recorded</h3>
-      {rec.participants.length === 0 && <p className="muted small">Nobody has spoken yet.</p>}
-      {rec.participants.map((p) => (
-        <div key={p.id} className="row spread participant">
-          <span className="row">
-            <span className={`speak-dot${p.speaking ? ' on' : ''}`} />
-            {p.name}
-          </span>
+        <div className="orb-caption">
+          <span className="display orb-title">#{rec.channelName}</span>
           <span className="muted small">
-            {p.utterances} clips · {Math.round(p.audioMs / 60000)} min
+            {rec.guildName}
+            {rec.reconnects > 0 && ` · ${rec.reconnects} reconnect${rec.reconnects === 1 ? '' : 's'}`}
           </span>
         </div>
-      ))}
-      {rec.skipped.length > 0 && (
-        <p className="muted small">Not recorded: {rec.skipped.map((s) => `${s.name} (${SKIP_REASON[s.reason] ?? s.reason})`).join(', ')}</p>
-      )}
-      <button className="danger stop" disabled={stopping} onClick={onStop}>
-        {stopping ? 'Stopping…' : '■ Stop recording'}
+      </section>
+
+      <section className="card">
+        <h2 className="eyebrow" style={{ margin: '0 0 6px' }}>At the table</h2>
+        {rec.participants.length === 0 && <p className="muted small">Nobody has spoken yet.</p>}
+        {rec.participants.map((p) => (
+          <div key={p.id} className="person">
+            <span className={`avatar${p.speaking ? ' speaking' : ''}`} style={{ ['--hue' as string]: speakerHue(p.name) }}>
+              {p.name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="person-name">
+              <strong>{p.name}</strong>
+              <span className="muted small">{p.speaking ? 'speaking' : `${Math.round(p.audioMs / 60000)} min`}</span>
+            </span>
+            <span className="muted small tabular">{p.utterances} clips</span>
+          </div>
+        ))}
+        {rec.skipped.map((p) => (
+          <div key={p.id} className="person skipped">
+            <span className="avatar">{p.name.slice(0, 1).toUpperCase()}</span>
+            <span className="person-name">
+              <strong>{p.name}</strong>
+              <span className="muted small">{SKIP_REASON[p.reason] ?? p.reason} · not recorded</span>
+            </span>
+          </div>
+        ))}
+      </section>
+
+      <button className="stop" disabled={stopping} onClick={onStop}>
+        <span className="stop-square" aria-hidden="true" />
+        {stopping ? 'Stopping…' : 'Stop recording'}
       </button>
     </div>
   );

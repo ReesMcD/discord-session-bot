@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendToSection, sectionsOf, splitHeader } from '../web/src/recap.js';
+import { appendToSection, sectionsOf, splitHeader, splitSections, takeKillCount } from '../web/src/recap.js';
 
 const MD = '# Recap: x\n\n- **Date:** today\n\n---\n\n## NPCs\n\n- **Strahd**: a vampire\n\n## Combat\n\n- vs. wolves\n- **Kill count:** Thorin 1\n';
 
@@ -20,4 +20,13 @@ test('adds a note at the end of a section, or creates the section', () => {
   assert.equal(appendToSection(MD, 'Combat', '- Thorin was knocked out'), `${MD}- Thorin was knocked out\n`);
   assert.equal(appendToSection(MD, 'Loot', 'Two potions\nand a map'), `${MD}\n## Loot\n\n- Two potions\n  and a map\n`);
   assert.equal(appendToSection(MD, 'NPCs', '   '), MD);
+});
+
+test('splits a recap into section cards and pulls out the kill count', () => {
+  const sections = splitSections('Intro line\n\n## NPCs\n\n- **Ireena**: x\n\n## Combat\n\n- **vs. wolves**: won.\n- **Kill count:** Thorin 2, Elara 1\n');
+  assert.deepEqual(sections.map((s) => s.title), ['', 'NPCs', 'Combat']);
+  assert.equal(sections[1]!.body, '- **Ireena**: x');
+  assert.deepEqual(takeKillCount(sections[2]!.body), { rest: '- **vs. wolves**: won.', kills: [['Thorin', 2], ['Elara', 1]] });
+  assert.deepEqual(takeKillCount('- nothing'), { rest: '- nothing', kills: [] });
+  assert.deepEqual(takeKillCount('- **Kill count:** Mary Sue 3').kills, [['Mary Sue', 3]]);
 });

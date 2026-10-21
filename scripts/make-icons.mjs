@@ -45,29 +45,82 @@ function png(size, pixel) {
   ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
-const dist = (x, y) => Math.hypot(x - 0.5, y - 0.5);
 const clear = [0, 0, 0, 0];
 
-// Menu bar (template: black + alpha; macOS tints it): a ring with a dot, like a record button.
+/*
+ * The Scrying Eye mark: a crystal orb on a stand, drawn in the 32-unit space of the web UI's
+ * OrbMark SVG (web/src/icons.tsx), so the PNGs and the SVGs match. Orb: centre (16, 13.5), radius
+ * 10.5. Stand: a cradle from the orb's sides, (9.5, 21.5) → (8, 27.5) → (24, 27.5) → (22.5, 21.5).
+ * Inside the full mark, an eye; the small mark has a glint of light instead, because a dot in the
+ * middle makes it read as a webcam.
+ */
+const ORB = { x: 16, y: 13.5, r: 10.5 };
+const STAND = [[9.5, 21.5], [8, 27.5], [24, 27.5], [22.5, 21.5]];
+const MARK_CENTRE_Y = 15.25; // halfway between the orb's top (3) and the stand's foot (27.5)
+
+function segmentDistance(px, py, [ax, ay], [bx, by]) {
+  const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)));
+  return Math.hypot(px - ax - t * (bx - ax), py - ay - t * (by - ay));
+}
+const onStand = (gx, gy, line) => STAND.slice(1).some((p, k) => segmentDistance(gx, gy, STAND[k], p) < line / 2);
+const toOrb = (gx, gy) => Math.hypot(gx - ORB.x, gy - ORB.y);
+
+/**
+ * Signed distance to an almond (negative inside): the overlap of two circles, so its corners
+ * come to a point. hw/hh are its half-width and half-height.
+ */
+function almond(gx, gy, cx, cy, hw, hh) {
+  const c = (hw * hw - hh * hh) / (2 * hh);
+  const r = hh + c;
+  return Math.max(Math.hypot(gx - cx, gy - cy - c) - r, Math.hypot(gx - cx, gy - cy + c) - r);
+}
+
+/** Maps a pixel (0–1) to mark units, with the mark filling `scale` of the image. */
+const toMark = (x, y, scale) => [16 + ((x - 0.5) * 32) / scale, MARK_CENTRE_Y + ((y - 0.5) * 32) / scale];
+
+// Full mark (app icon): orb outline and stand, an eye inside, a solid pupil.
+const fullMark = (gx, gy, line) =>
+  Math.abs(toOrb(gx, gy) - ORB.r) < line / 2 ||
+  onStand(gx, gy, line) ||
+  Math.abs(almond(gx, gy, ORB.x, ORB.y, 6, 4)) < line / 2 ||
+  toOrb(gx, gy) < 1.7;
+
+// The glint: an arc of radius 6 inside the orb, upper left (200° to 245°, y pointing down).
+const GLINT = { r: 6, from: 200, to: 245 };
+const polar = (deg, r) => [ORB.x + r * Math.cos((deg * Math.PI) / 180), ORB.y + r * Math.sin((deg * Math.PI) / 180)];
+function onGlint(gx, gy, line) {
+  const angle = ((Math.atan2(gy - ORB.y, gx - ORB.x) * 180) / Math.PI + 360) % 360;
+  if (angle >= GLINT.from && angle <= GLINT.to && Math.abs(toOrb(gx, gy) - GLINT.r) < line / 2) return true;
+  return [GLINT.from, GLINT.to].some((deg) => {
+    const [ex, ey] = polar(deg, GLINT.r);
+    return Math.hypot(gx - ex, gy - ey) < line / 2; // round caps
+  });
+}
+
+// Menu bar (template: black + alpha; macOS tints it). At 16 px the inner eye blurs, so the small
+// mark is the orb, the stand and the glint.
+const SMALL = { scale: 0.98, line: 2.6 };
+const smallOutline = (gx, gy) => Math.abs(toOrb(gx, gy) - ORB.r) < SMALL.line / 2 || onStand(gx, gy, SMALL.line);
 const tray = (x, y) => {
-  const d = dist(x, y);
-  return (d < 0.42 && d > 0.32) || d < 0.18 ? [0, 0, 0, 1] : clear;
+  const [gx, gy] = toMark(x, y, SMALL.scale);
+  return smallOutline(gx, gy) || onGlint(gx, gy, SMALL.line) ? [0, 0, 0, 1] : clear;
 };
-// Recording: same shape, filled red dot (not a template, so it stays red).
+// Recording: the orb in red, glowing (not a template, so it stays red on light and dark menu bars).
 const trayRec = (x, y) => {
-  const d = dist(x, y);
-  if (d < 0.2) return [230, 57, 70, 1];
-  return d < 0.42 && d > 0.32 ? [0, 0, 0, 1] : clear;
+  const [gx, gy] = toMark(x, y, SMALL.scale);
+  if (smallOutline(gx, gy) || onGlint(gx, gy, SMALL.line)) return [230, 57, 70, 1];
+  return toOrb(gx, gy) < ORB.r ? [230, 57, 70, 0.4] : clear;
 };
-// App icon: rounded indigo square, white ring and dot.
+// App icon: an ink-blue rounded square, the orb in pale teal with a faint glow inside the glass.
 const app = (x, y) => {
   const m = 0.09, rad = 0.2;
   const qx = Math.max(Math.abs(x - 0.5) - (0.5 - m - rad), 0), qy = Math.max(Math.abs(y - 0.5) - (0.5 - m - rad), 0);
   if (Math.hypot(qx, qy) > rad) return clear;
-  const d = dist(x, y);
-  if ((d < 0.27 && d > 0.2) || d < 0.12) return [255, 255, 255, 1];
-  const t = y;
-  return [Math.round(88 + (72 - 88) * t), Math.round(101 + (80 - 101) * t), Math.round(242 + (220 - 242) * t), 1];
+  const [gx, gy] = toMark(x, y, 0.66);
+  if (fullMark(gx, gy, 1.45)) return [127, 231, 212, 1];
+  const glow = toOrb(gx, gy) < ORB.r ? Math.max(0, 1 - Math.hypot(gx - 14, gy - 11) / 11) * 0.24 : 0;
+  const base = [13 + 8 * y, 15 + 10 * y, 21 + 16 * y];
+  return [base[0] + (127 - base[0]) * glow, base[1] + (231 - base[1]) * glow, base[2] + (212 - base[2]) * glow, 1].map((v, k) => (k < 3 ? Math.round(v) : v));
 };
 
 writeFileSync('electron/assets/trayTemplate.png', png(16, tray));
