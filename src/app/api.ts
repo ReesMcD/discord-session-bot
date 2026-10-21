@@ -11,7 +11,9 @@ import type { PromptName } from '../summary/prompts.js';
 import { saveRecapEdit } from '../summary/recapEdits.js';
 import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
 import type { BotControl, BotStatus } from '../bot/types.js';
-import { normalizeUrl, type MusicControl, type MusicStatus } from '../music/control.js';
+import type { MusicControl, MusicStatus } from '../music/control.js';
+import { musicRoutes } from './musicRoutes.js';
+import { MusicLibrary } from '../music/library.js';
 import { UPLOAD_TOKEN_ENV, testUpload } from '../upload/recapUpload.js';
 import { configSchema } from '../config/schema.js';
 
@@ -166,45 +168,7 @@ export function createApi(opts: ApiOptions): Hono {
     }
   });
 
-  // --- Music (the Mac app's built-in browser) -----------------------------------------------------
-  const noMusic: MusicStatus = { available: false, inChannel: false, master: 1, monitor: true, tabs: [] };
-  const unit = (v: unknown) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : undefined);
-  api.get('/music', (c) => c.json(opts.music?.status() ?? noMusic));
-  api.post('/music/tabs', async (c) => {
-    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
-    const { url } = (await c.req.json().catch(() => ({}))) as { url?: unknown };
-    try {
-      opts.music.openTab(normalizeUrl(typeof url === 'string' ? url : ''));
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 400);
-    }
-    return c.json(opts.music.status());
-  });
-  api.patch('/music/tabs/:id', async (c) => {
-    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
-    const id = c.req.param('id');
-    if (!opts.music.status().tabs.some((t) => t.id === id)) return c.json({ error: 'not found' }, 404);
-    const body = (await c.req.json().catch(() => ({}))) as { volume?: unknown; muted?: unknown; active?: unknown };
-    if (body.volume !== undefined && unit(body.volume) === undefined) return c.json({ error: 'volume must be between 0 and 1' }, 400);
-    opts.music.updateTab(id, {
-      ...(body.volume !== undefined ? { volume: body.volume as number } : {}),
-      ...(typeof body.muted === 'boolean' ? { muted: body.muted } : {}),
-      ...(body.active === true ? { active: true } : {}),
-    });
-    return c.json(opts.music.status());
-  });
-  api.delete('/music/tabs/:id', (c) => {
-    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
-    opts.music.closeTab(c.req.param('id'));
-    return c.json(opts.music.status());
-  });
-  api.patch('/music', async (c) => {
-    if (!opts.music) return c.json({ error: 'Music needs the Mac app' }, 409);
-    const body = (await c.req.json().catch(() => ({}))) as { master?: unknown; monitor?: unknown };
-    if (body.master !== undefined && unit(body.master) === undefined) return c.json({ error: 'master must be between 0 and 1' }, 400);
-    opts.music.update({ ...(body.master !== undefined ? { master: body.master as number } : {}), ...(typeof body.monitor === 'boolean' ? { monitor: body.monitor } : {}) });
-    return c.json(opts.music.status());
-  });
+  api.route('/music', musicRoutes(opts.music, new MusicLibrary(opts.dataDir)));
 
   // --- Config -----------------------------------------------------------------------------------
   /** Sends a test request with the upload settings given (unsaved edits included). */

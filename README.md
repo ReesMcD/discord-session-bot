@@ -396,6 +396,12 @@ What's in it:
   volume and close tabs. *Also play on this Mac* lets you hear the mix locally (capturing a tab
   silences it on the Mac otherwise). Spotify won't play: its web player needs DRM (Widevine), which
   the app's browser doesn't include. The bot's own audio isn't recorded.
+  - **Scenes**: save the open tabs (with their volumes) as a scene, like "Tavern" or "Combat". One tap
+    switches to it, crossfading (cut, 3 s or 8 s): its tabs fade in, the others fade out and close.
+    A page in both scenes keeps playing.
+  - **Soundboard**: short effects (an audio file, or a link that's downloaded once) that play once
+    over the music, each with its own volume. They work with no tab open too.
+  - Scenes and sounds are kept in the data folder (`music/`), so they're set up once.
 
 **Security:** the app controls a bot that records people, so it always needs the password, and it
 only answers this Mac and your Tailscale devices. Other devices on your Wi-Fi get "forbidden" (set

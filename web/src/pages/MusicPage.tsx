@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, subscribe } from '../api';
-import type { MusicStatus, MusicTab } from '../types';
+import type { MusicLibraryState, MusicStatus, MusicTab } from '../types';
+import { ScenesCard, SoundboardCard } from './MusicLibrary';
 import { Empty, Toggle } from '../ui';
 
 const QUICK = [
@@ -16,8 +17,10 @@ export function MusicPage() {
   const [status, setStatus] = useState<MusicStatus | null>(null);
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
+  const [library, setLibrary] = useState<MusicLibraryState>({ scenes: [], sounds: [] });
   useEffect(() => {
     api<MusicStatus>('/music').then(setStatus, (e: Error) => setError(e.message));
+    api<MusicLibraryState>('/music/library').then(setLibrary, () => {});
     return subscribe({ onMusic: setStatus });
   }, []);
 
@@ -54,6 +57,11 @@ export function MusicPage() {
           : 'The bot plays music while it’s in a voice channel: start a recording to be heard.'}
       </p>
       {error && <div className="error-box">{error}</div>}
+
+      <div className="music-library">
+        <ScenesCard library={library} status={status} onLibrary={setLibrary} onStatus={setStatus} onError={setError} />
+        <SoundboardCard library={library} status={status} onLibrary={setLibrary} onStatus={setStatus} onError={setError} />
+      </div>
 
       <form className="card music-open" onSubmit={submit}>
         <label htmlFor="music-url" className="visually-hidden">
