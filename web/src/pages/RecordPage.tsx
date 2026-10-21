@@ -111,7 +111,26 @@ function SpeakerIcon() {
 }
 
 function BotBanner({ status }: { status: BotStatus }) {
-  if (status.state === 'ready') return <p className="muted small">Connected to Discord as {status.user}.</p>;
+  if (status.state === 'ready')
+    return (
+      <>
+        <p className="muted small">
+          Connected to Discord as {status.user}.{status.commands === 'ready' && ' In Discord: /record, /stop and /status.'}
+        </p>
+        {status.commands === 'needs-invite' && status.inviteUrl && (
+          <div className="card notice">
+            <strong>One step for slash commands</strong>
+            <p className="small" style={{ margin: '6px 0 10px' }}>
+              The bot was added to your server without permission for slash commands (or to speak, which music needs). Open this link and add it again: nothing is lost,
+              and /record, /stop and /status appear in Discord.
+            </p>
+            <a className="button primary" href={status.inviteUrl} target="_blank" rel="noreferrer">
+              Re-add the bot ↗
+            </a>
+          </div>
+        )}
+      </>
+    );
   if (status.state === 'connecting') return <div className="card">Connecting to Discord…</div>;
   const desktop = !!window.sessionBot;
   return (
