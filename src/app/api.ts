@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { PromptName } from '../summary/prompts.js';
 import { saveRecapEdit } from '../summary/recapEdits.js';
 import { resolveUnpaired, type UnpairedAction } from './unpaired.js';
-import type { BotControl, BotStatus } from '../bot/types.js';
+import type { BotControl, BotStatus, LiveUpdate } from '../bot/types.js';
 import type { MusicControl, MusicStatus } from '../music/control.js';
 import { musicRoutes } from './musicRoutes.js';
 import { MusicLibrary } from '../music/library.js';
@@ -132,6 +132,8 @@ export function createApi(opts: ApiOptions): Hono {
       const send = (job: Job) => void stream.writeSSE({ event: 'job', data: JSON.stringify(job) });
       const sendBot = (status: BotStatus) => void stream.writeSSE({ event: 'bot', data: JSON.stringify(status) });
       const sendMusic = (status: MusicStatus) => void stream.writeSSE({ event: 'music', data: JSON.stringify(status) });
+      const sendLive = (update: LiveUpdate) => void stream.writeSSE({ event: 'live', data: JSON.stringify(update) });
+      opts.bot?.on('live', sendLive);
       opts.jobs.on('job', send);
       opts.bot?.on('status', sendBot);
       opts.music?.on('status', sendMusic);
@@ -142,12 +144,14 @@ export function createApi(opts: ApiOptions): Hono {
       opts.jobs.off('job', send);
       opts.bot?.off('status', sendBot);
       opts.music?.off('status', sendMusic);
+      opts.bot?.off('live', sendLive);
     }),
   );
 
   // --- Bot / recording --------------------------------------------------------------------------
   const noBot: BotStatus = { state: 'off', recording: null };
   api.get('/bot', (c) => c.json(opts.bot?.status() ?? noBot));
+  api.get('/bot/live', (c) => c.json(opts.bot?.liveTranscript?.() ?? { sessionId: null, lines: [] }));
   api.get('/bot/guilds', (c) => c.json(opts.bot?.guilds() ?? []));
   api.post('/bot/join', async (c) => {
     if (!opts.bot) return c.json({ error: 'The Discord bot is not running (no DISCORD_TOKEN)' }, 409);

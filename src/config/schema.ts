@@ -92,9 +92,11 @@ export const configSchema = z
         concurrency: z.number().int().min(1).max(8).default(2),
         /** Skip utterances shorter than this (coughs, clicks; also a common source of hallucinations). */
         min_utterance_ms: z.number().int().min(0).default(400),
+        /** Also transcribe while recording, so lines show up in the app during the call (a preview: costs a second pass). */
+        live: z.boolean().default(false),
       })
       .strict()
-      .default({ provider: 'groq', batch_minutes: 10, concurrency: 2, min_utterance_ms: 400 }),
+      .default({ provider: 'groq', batch_minutes: 10, concurrency: 2, min_utterance_ms: 400, live: false }),
 
     transcript: z
       .object({

@@ -10,6 +10,8 @@ export type {
   GuildInfo,
   Job,
   JobStep,
+  LiveTranscript,
+  LiveUpdate,
   MusicLibraryState,
   MusicScene,
   MusicSound,
@@ -24,6 +26,9 @@ export type {
   UnpairedSpeaker,
   UploadTestResult,
 } from '../../src/shared/types';
+
+/** GET /bot/live and the "live" event. */
+export type LiveSnapshot = import('../../src/shared/types').LiveTranscript & { sessionId: string | null };
 
 /** A session as GET /sessions/:id returns it, with its jobs. */
 export type SessionDetail = SessionDetailWithJobs;

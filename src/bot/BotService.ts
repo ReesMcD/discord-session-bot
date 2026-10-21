@@ -9,7 +9,10 @@ import { SessionRecorder } from '../recording/SessionRecorder.js';
 import { MusicBroadcast } from '../music/broadcast.js';
 import type { ConfigStore } from '../app/configStore.js';
 import type { JobRunner } from '../app/jobs.js';
-import type { BotControl, BotStatus, GuildInfo, RecordingStatus } from './types.js';
+import type { BotControl, BotStatus, GuildInfo, LiveSnapshot, LiveUpdate, RecordingStatus } from './types.js';
+import type { LiveTranscript, TranscriptLine } from '../shared/types.js';
+import { LiveTranscriber } from '../transcription/live.js';
+import { createTranscriber } from '../transcription/factory.js';
 
 export interface BotServiceOptions {
   dataDir: string;
@@ -69,6 +72,8 @@ export class BotService extends EventEmitter implements BotControl {
   /** Servers that refused the slash commands (bot added without applications.commands). */
   private readonly commandsRefused = new Set<string>();
   private commandsReady = false;
+  /** The live transcript of the current recording, when it's on (or why it couldn't start). */
+  private live: { sessionId: string; transcriber?: LiveTranscriber; error?: string } | undefined;
 
   constructor(private readonly opts: BotServiceOptions) {
     super();
@@ -90,7 +95,7 @@ export class BotService extends EventEmitter implements BotControl {
       state: this.state,
       ...(this.client?.user ? { user: this.client.user.tag } : {}),
       ...(this.error ? { error: this.error } : {}),
-      recording: this.recorder?.status() ?? null,
+      recording: this.recorder ? { ...this.recorder.status(), ...(this.live ? { live: true } : {}) } : null,
       ...(this.commandsReady ? { commands: this.commandsRefused.size ? 'needs-invite' : 'ready' } : {}),
       ...(this.commandsRefused.size && this.client?.application ? { inviteUrl: inviteUrl(this.client.application.id) } : {}),
     };
@@ -157,6 +162,29 @@ export class BotService extends EventEmitter implements BotControl {
     }
   }
 
+  liveTranscript(): LiveSnapshot {
+    if (!this.live) return { sessionId: null, lines: [] };
+    const snapshot = this.live.transcriber?.snapshot() ?? { lines: [] };
+    const error = this.live.error ?? snapshot.error;
+    return { sessionId: this.live.sessionId, lines: snapshot.lines, ...(error ? { error } : {}) };
+  }
+
+  private startLive(sessionId: string, sessionDir: string, config: ReturnType<typeof loadConfig>['config'], recorder: SessionRecorder): void {
+    try {
+      const transcriber = new LiveTranscriber({ sessionDir, config, transcriber: createTranscriber(config.transcription), log: this.log });
+      recorder.on('utterance', (rec) => transcriber.add(rec));
+      transcriber.on('lines', (added: TranscriptLine[], snapshot: LiveTranscript) => {
+        const update: LiveUpdate = { sessionId, added, ...(snapshot.error ? { error: snapshot.error } : {}) };
+        this.emit('live', update);
+      });
+      transcriber.start();
+      this.live = { sessionId, transcriber };
+    } catch (err) {
+      this.live = { sessionId, error: `Live transcript is off: ${(err as Error).message}` };
+      this.log(this.live.error!);
+    }
+  }
+
   guilds(): GuildInfo[] {
     if (!this.client || this.state !== 'ready') return [];
     return [...this.client.guilds.cache.values()]
@@ -206,6 +234,7 @@ export class BotService extends EventEmitter implements BotControl {
       throw err;
     }
     recorder.play(this.music.player);
+    if (config.transcription.live) this.startLive(sessionId, join(sessionsRoot, sessionId), config, recorder);
     if (config.recording.announce) {
       await channel.send('🔴 **Recording started.** This call is being recorded and transcribed.').catch(() => this.log('could not post the start notice (needs Send Messages)'));
     }
@@ -219,6 +248,8 @@ export class BotService extends EventEmitter implements BotControl {
     const { sessionId, channelId, startedAt } = recorder.status();
     await recorder.stop();
     this.recorder = undefined;
+    await this.live?.transcriber?.stop();
+    this.live = undefined;
     this.emitStatus(true);
     const { config } = loadConfig(this.opts.configPath);
     if (config.recording.announce) {

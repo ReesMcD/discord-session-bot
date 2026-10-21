@@ -326,3 +326,5 @@ details.card > summary { cursor: pointer; min-height: 32px; display: flex; align
 .add-sound .row { justify-content: flex-end; margin-top: 6px; }
 .pad.editing .music-slider { align-self: stretch; }
 a.button { display: inline-flex; align-items: center; text-decoration: none; }
+.live-transcript input[type='search'] { margin: 10px 0 8px; }
+.live-lines { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }

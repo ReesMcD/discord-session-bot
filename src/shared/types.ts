@@ -210,6 +210,22 @@ export interface RecordingStatus {
   participants: { id: string; name: string; utterances: number; audioMs: number; speaking: boolean }[];
   skipped: { id: string; name: string; reason: string }[];
   reconnects: number;
+  /** Set when the live transcript is on for this recording. */
+  live?: boolean;
+}
+
+/** The "live" event: only the lines added since the last one (GET /bot/live has them all). */
+export interface LiveUpdate {
+  sessionId: string;
+  added: TranscriptLine[];
+  error?: string;
+}
+
+/** GET /bot/live: lines transcribed during the recording. */
+export interface LiveTranscript {
+  lines: TranscriptLine[];
+  /** The last batch that failed, if the latest one did. */
+  error?: string;
 }
 
 export interface BotStatus {
