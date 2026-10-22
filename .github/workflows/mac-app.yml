@@ -30,7 +30,9 @@ jobs:
       - name: Launch it once (smoke test)
         run: |
           APP="release/mac-arm64/Session Bot.app"
-          codesign -dv "$APP" 2>&1 | head -5 || true
+          # The whole bundle must be sealed, or a downloaded copy opens as "damaged".
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv "$APP" 2>&1 | head -5
           "$APP/Contents/MacOS/Session Bot" --smoke-test 2>&1 | tee smoke.log &
           PID=$!
           for i in $(seq 1 90); do

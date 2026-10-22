@@ -555,7 +555,7 @@ Both APIs charge by usage, so check current pricing before relying on these roug
 | Problem | Fix |
 |---|---|
 | Mac app: "Session Bot can't be opened" / "developer cannot be verified" | System Settings → Privacy & Security → **Open Anyway** (once per version). |
-| Mac app: "Session Bot is damaged and can't be opened" | macOS quarantine on unsigned downloads. In Terminal: `xattr -dr com.apple.quarantine "/Applications/Session Bot.app"`, then open it. |
+| Mac app: "Session Bot is damaged and can't be opened" | Versions up to 0.4.0 weren't fully signed. Install 0.4.1 or later, or in Terminal run `xattr -dr com.apple.quarantine "/Applications/Session Bot.app"`, then open it. |
 | Mac app: "Port 4400 is already in use" | Another copy is running (or `npm run app`). Quit it. |
 | Mac app: menu says "Discord bot is off" | Add the token under Settings → Keys & phone. |
 | macOS asks whether Session Bot may accept incoming connections | Allow it if you want phone access; deny if you only use it on the Mac. |
