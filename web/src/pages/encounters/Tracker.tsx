@@ -3,6 +3,7 @@ import type { Combatant, CombatantKind, EncounterAction, EncounterState } from '
 import { Badge } from '../../ui';
 import { CombatantPanel } from './CombatantPanel';
 import { JoinPanel } from './JoinPanel';
+import { MapCard } from './MapCard';
 
 type Act = (action: EncounterAction) => Promise<void>;
 
@@ -66,9 +67,18 @@ export function Tracker({ state, act, onEnd }: { state: EncounterState; act: Act
         </div>
       ))}
 
+      <MapCard
+        state={state}
+        act={act}
+        onSelect={(id) => {
+          setOpen(id);
+          document.getElementById(`combatant-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }}
+      />
+
       <ol className="initiative" aria-label="Turn order">
         {ordered.map((c) => (
-          <li key={c.id} className={`combatant ${c.id === state.turn ? 'current' : ''} ${c.hp === 0 ? 'down' : ''}`}>
+          <li key={c.id} id={`combatant-${c.id}`} className={`combatant ${c.id === state.turn ? 'current' : ''} ${c.hp === 0 ? 'down' : ''}`}>
             <CombatantRow c={c} setup={!running} open={open === c.id} onToggle={() => setOpen(open === c.id ? null : c.id)} act={act} />
             {open === c.id && <CombatantPanel c={c} state={state} act={act} />}
           </li>
