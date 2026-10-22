@@ -105,8 +105,8 @@ You only need the keys for the steps you'll use.
    Treat it like a password. If it leaks, reset it here.
 3. The bot needs no privileged intents. Leave **Presence**, **Server Members** and **Message Content** off.
 4. Open **OAuth2 → URL Generator**:
-   - **Scopes:** `bot` and `applications.commands` (for `/record`, `/stop` and `/status`)
-   - **Bot permissions:** **View Channels**, **Connect**, **Speak** (to play music), **Send Messages**, **Attach Files**
+   - **Scopes:** `bot` and `applications.commands` (for `/record`, `/stop`, `/status` and `/encounter`)
+   - **Bot permissions:** **View Channels**, **Connect**, **Speak** (to play music), **Send Messages**, **Attach Files**, **Embed Links** (the encounter's join post)
 
    Added the bot before slash commands existed? The app's Record page shows a **Re-add the bot**
    link with all of this filled in. Adding it again keeps everything.
@@ -432,6 +432,14 @@ What's in it:
     whether monsters look healthy, bloodied or down.
   - They change only their own character's HP, conditions and initiative.
   - To reach their phones it needs a public address: see **Settings → Players** (Tailscale Funnel).
+  - **Posting the link:**
+    - **From Discord:** `/encounter start` (pick one prepared in the wiki as you type, or type a
+      name for a blank one) posts the link with a **Join** button in that channel. `/encounter link`
+      posts it again; `/encounter end` ends it and the link stops working.
+    - **From the app:** **Post to Discord** on the tracker posts into the chat of the voice channel
+      being recorded (or where `/encounter` was last used).
+    - Like `/record`, `/encounter` is for people with **Manage Server** by default. Players only
+      hear that a fight is over, never the DM's summary.
 
 **Security:** the app controls a bot that records people, so it always needs the password, and it
 only answers this Mac and your Tailscale devices. Other devices on your Wi-Fi get "forbidden" (set

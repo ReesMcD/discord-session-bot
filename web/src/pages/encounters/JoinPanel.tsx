@@ -28,6 +28,13 @@ export function JoinPanel({ state }: { state: EncounterState }) {
       setNote((e as Error).message);
     }
   };
+  const post = async () => {
+    try {
+      setNote((await api<{ message: string }>('/encounter/post', { method: 'POST', json: {} })).message);
+    } catch (e) {
+      setNote((e as Error).message);
+    }
+  };
   const replace = async () => {
     setConfirmNew(false);
     try {
@@ -54,6 +61,9 @@ export function JoinPanel({ state }: { state: EncounterState }) {
         </p>
       )}
       <div className="row">
+        <button className="primary" onClick={() => void post()} disabled={!link?.url} title={link?.url ? 'Into the voice channel being recorded, or where /encounter was last used' : 'Set the public address first'}>
+          Post to Discord
+        </button>
         <button onClick={() => void copy()} disabled={!shown}>
           Copy link
         </button>

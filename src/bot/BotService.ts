@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ChannelType, Client, DiscordAPIError, Events, GatewayIntentBits, MessageFlags, type ChatInputCommandInteraction, type Guild, type VoiceBasedChannel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, DiscordAPIError, EmbedBuilder, Events, GatewayIntentBits, MessageFlags, type AutocompleteInteraction, type ChatInputCommandInteraction, type Guild, type VoiceBasedChannel } from 'discord.js';
 import { COMMANDS, inviteUrl, runCommand, type CommandName } from './commands.js';
+import { encounterChoices, runEncounterCommand, type EncounterCommandDeps, type EncounterPost } from './encounterCommand.js';
 import { loadConfig } from '../config/load.js';
 import { listUtterances, paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { SessionRecorder } from '../recording/SessionRecorder.js';
@@ -74,6 +75,10 @@ export class BotService extends EventEmitter implements BotControl {
   private commandsReady = false;
   /** The live transcript of the current recording, when it's on (or why it couldn't start). */
   private live: { sessionId: string; transcriber?: LiveTranscriber; error?: string } | undefined;
+  /** The app's encounters, for /encounter. */
+  private encounters: EncounterCommandDeps | undefined;
+  /** Where /encounter was last used: the app's "Post to Discord" goes there when not recording. */
+  private encounterChannelId: string | undefined;
 
   constructor(private readonly opts: BotServiceOptions) {
     super();
@@ -88,6 +93,11 @@ export class BotService extends EventEmitter implements BotControl {
       this.log(`recovered interrupted recording ${id}`);
       this.afterStop(id);
     }
+  }
+
+  /** Lets /encounter start, end and link the app's encounters. */
+  attachEncounters(deps: EncounterCommandDeps): void {
+    this.encounters = deps;
   }
 
   status(): BotStatus {
@@ -113,7 +123,8 @@ export class BotService extends EventEmitter implements BotControl {
     });
     client.on(Events.GuildCreate, (g) => void this.registerCommands(g).then(() => this.emitStatus(true)));
     client.on(Events.InteractionCreate, (i) => {
-      if (i.isChatInputCommand()) void this.answer(i);
+      if (i.isChatInputCommand()) void (i.commandName === 'encounter' ? this.answerEncounter(i) : this.answer(i));
+      else if (i.isAutocomplete() && i.commandName === 'encounter') void this.suggestEncounters(i);
     });
     client.on(Events.VoiceStateUpdate, () => this.emitStatus());
     client.on(Events.Error, (err) => this.log(`discord error: ${err.message}`));
@@ -160,6 +171,59 @@ export class BotService extends EventEmitter implements BotControl {
     } catch (err) {
       this.log(`/${i.commandName}: ${(err as Error).message}`);
     }
+  }
+
+  /** /encounter start|link|end: the DM gets a private reply; the join link is posted for everyone. */
+  private async answerEncounter(i: ChatInputCommandInteraction): Promise<void> {
+    if (!i.inGuild()) return;
+    try {
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
+      if (!this.encounters) return void (await i.editReply('Encounters need the app running (npm run app or the Mac app).'));
+      const sub = i.options.getSubcommand() as 'start' | 'link' | 'end';
+      const result = await runEncounterCommand(sub, i.options.getString('name') ?? undefined, this.encounters);
+      this.log(`/encounter ${sub} by ${i.user.tag}`);
+      let reply = result.reply;
+      if (result.post) {
+        this.encounterChannelId = i.channelId;
+        try {
+          await this.send(i.channelId, result.post);
+        } catch (err) {
+          reply += `\nI couldn't post in this channel (${(err as Error).message}): give me Send Messages and Embed Links here.${result.post.url ? `\nThe link: ${result.post.url}` : ''}`;
+        }
+      }
+      await i.editReply(reply);
+    } catch (err) {
+      this.log(`/encounter: ${(err as Error).message}`);
+    }
+  }
+
+  /** Suggests the wiki's prepared encounters as the DM types; Discord gives this 3 seconds. */
+  private async suggestEncounters(i: AutocompleteInteraction): Promise<void> {
+    try {
+      const list = this.encounters ? await Promise.race([this.encounters.wiki.list(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('slow')), 2500))]) : [];
+      await i.respond(encounterChoices(String(i.options.getFocused()), list));
+    } catch (err) {
+      // No suggestions (wiki unreachable or slow): the DM can still type a name for a blank one.
+      this.log(`/encounter suggestions: ${(err as Error).message}`);
+      await i.respond([]).catch(() => {});
+    }
+  }
+
+  /** Posts an embed, with a Join button when there's a link. */
+  private async send(channelId: string, post: EncounterPost): Promise<{ channelName: string }> {
+    const channel = await this.client?.channels.fetch(channelId);
+    if (!channel?.isSendable()) throw new Error('not a channel I can post in');
+    const embed = new EmbedBuilder().setTitle(post.title).setDescription(post.description).setColor(0x7fe7d4);
+    const components = post.url ? [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Join').setURL(post.url))] : [];
+    await channel.send({ embeds: [embed], components });
+    return { channelName: 'name' in channel && channel.name ? channel.name : 'the channel' };
+  }
+
+  /** The app's "Post to Discord": into the voice channel being recorded (its chat), else where /encounter was last used. */
+  async postEncounter(post: EncounterPost): Promise<{ channelName: string }> {
+    const channelId = this.recorder?.status().channelId ?? this.encounterChannelId;
+    if (!channelId) throw new Error('Start a recording, or use /encounter in a channel once, so I know where to post');
+    return this.send(channelId, post);
   }
 
   liveTranscript(): LiveSnapshot {

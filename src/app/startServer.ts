@@ -4,7 +4,8 @@ import type { AddressInfo } from 'node:net';
 import { serve, type ServerType } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
-import { createApi } from './api.js';
+import { createApi, wikiEncountersFor } from './api.js';
+import { publicJoinUrl } from './encounterRoutes.js';
 import type { PasswordSource } from './auth.js';
 import { networkGuard } from './network.js';
 import { pruneOldAudio } from '../session/retention.js';
@@ -72,6 +73,16 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   pruneTimer.unref();
 
   const encounters = new EncounterStore(opts.dataDir, undefined, log);
+  const wikiEncounters = wikiEncountersFor(opts.dataDir, configStore);
+  opts.bot?.attachEncounters({
+    store: encounters,
+    wiki: wikiEncounters,
+    joinUrl: () => {
+      const code = encounters.current()?.join?.code;
+      const players = configStore.read().config?.players;
+      return code && players ? publicJoinUrl({ publicUrl: players.public_url, port: players.port }, code) : null;
+    },
+  });
 
   const app = new Hono();
   app.use('*', networkGuard(opts.allowLan ?? false));
@@ -83,6 +94,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       configStore,
       jobs,
       encounters,
+      wikiEncounters,
       ...(opts.bot ? { bot: opts.bot } : {}),
       ...(opts.music ? { music: opts.music } : {}),
       ...(opts.corsOrigins ? { corsOrigins: opts.corsOrigins } : {}),

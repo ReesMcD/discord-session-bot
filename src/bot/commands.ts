@@ -1,12 +1,18 @@
 import { ChannelType, InteractionContextType, PermissionFlagsBits, SlashCommandBuilder, type RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord.js';
 import type { BotControl, RecordingStatus } from './types.js';
+import { ENCOUNTER_COMMAND } from './encounterCommand.js';
 
 /**
  * What the bot needs in a server: View Channels, Send Messages and Attach Files (notices and
- * transcripts), Connect (to record) and Speak (to play music).
+ * transcripts), Embed Links (the encounter join post), Connect (to record) and Speak (to play music).
  */
 export const BOT_PERMISSIONS =
-  PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.AttachFiles | PermissionFlagsBits.Connect | PermissionFlagsBits.Speak;
+  PermissionFlagsBits.ViewChannel |
+  PermissionFlagsBits.SendMessages |
+  PermissionFlagsBits.AttachFiles |
+  PermissionFlagsBits.EmbedLinks |
+  PermissionFlagsBits.Connect |
+  PermissionFlagsBits.Speak;
 
 /** The link that (re-)adds the bot with slash commands and every permission it needs. */
 export function inviteUrl(applicationId: string): string {
@@ -14,7 +20,7 @@ export function inviteUrl(applicationId: string): string {
 }
 
 /**
- * /record and /stop default to people with Manage Server (who can allow other roles under Server
+ * /record, /stop and /encounter default to people with Manage Server (who can allow other roles under Server
  * Settings → Integrations); /status is open to everyone, so anyone can check they're being recorded.
  */
 export const COMMANDS: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
@@ -27,6 +33,7 @@ export const COMMANDS: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     .toJSON(),
   new SlashCommandBuilder().setName('stop').setDescription('Stop recording').setContexts(InteractionContextType.Guild).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).toJSON(),
   new SlashCommandBuilder().setName('status').setDescription('Is this server being recorded, and who is in it?').setContexts(InteractionContextType.Guild).toJSON(),
+  ENCOUNTER_COMMAND,
 ];
 
 export type CommandName = 'record' | 'stop' | 'status';

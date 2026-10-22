@@ -42,6 +42,13 @@ export interface ApiOptions {
   encounters?: EncounterStore;
   /** For tests: the HTTP client for calls out (the wiki's encounters, the join link check). */
   httpFetch?: typeof fetch;
+  /** The wiki's encounters (default: from the upload settings and WIKI_UPLOAD_TOKEN). */
+  wikiEncounters?: WikiEncounters;
+}
+
+/** The wiki's encounters, from the same address and key as recap uploads. */
+export function wikiEncountersFor(dataDir: string, configStore: ConfigStore, doFetch?: typeof fetch): WikiEncounters {
+  return new WikiEncounters(dataDir, () => configSchema.parse(configStore.read().config ?? {}), () => process.env[UPLOAD_TOKEN_ENV], doFetch);
 }
 
 const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize', 'upload'];
@@ -49,12 +56,7 @@ const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize', 'u
 export function createApi(opts: ApiOptions): Hono {
   const api = new Hono();
   const encounters = opts.encounters ?? new EncounterStore(opts.dataDir);
-  const wikiEncounters = new WikiEncounters(
-    opts.dataDir,
-    () => configSchema.parse(opts.configStore.read().config ?? {}),
-    () => process.env[UPLOAD_TOKEN_ENV],
-    opts.httpFetch,
-  );
+  const wikiEncounters = opts.wikiEncounters ?? wikiEncountersFor(opts.dataDir, opts.configStore, opts.httpFetch);
   if (opts.corsOrigins?.length) {
     api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
   }
@@ -201,6 +203,7 @@ export function createApi(opts: ApiOptions): Hono {
         return { publicUrl: players.public_url, port: players.port };
       },
       opts.httpFetch,
+      opts.bot,
     ),
   );
 
