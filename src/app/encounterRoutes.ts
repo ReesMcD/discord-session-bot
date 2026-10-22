@@ -3,6 +3,8 @@ import { EncounterError } from '../encounter/rules.js';
 import type { EncounterStore } from '../encounter/store.js';
 import { encounterFromWiki, WikiEncountersError, type WikiEncounters } from '../encounter/wiki.js';
 import type { EncounterAction } from '../shared/types.js';
+import type { BotControl } from '../bot/types.js';
+import { joinPost } from '../bot/encounterCommand.js';
 
 /**
  * The DM's encounter API (behind the app password):
@@ -14,6 +16,7 @@ import type { EncounterAction } from '../shared/types.js';
  *   POST /encounter/end                      end it; answers with the summary
  *   GET  /encounter/link                     the players' join link
  *   POST /encounter/link                     a new link (the old one stops working)
+ *   POST /encounter/post                     post the join link in Discord
  *   POST /players/check                      { public_url }: does the public address reach the players' page?
  */
 /** Where players join: the public address (Funnel) when set, and this Mac's own address for testing. */
@@ -22,7 +25,10 @@ export interface JoinLinks {
   port: number;
 }
 
-export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters, links: () => JoinLinks, doFetch: typeof fetch = fetch): Hono {
+/** The public join link for a code, when a public address is set. */
+export const publicJoinUrl = (links: JoinLinks, code: string) => (links.publicUrl ? new URL(`/play/${code}`, links.publicUrl).href : null);
+
+export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters, links: () => JoinLinks, doFetch: typeof fetch = fetch, bot?: BotControl): Hono {
   const r = new Hono();
   const failed = (c: Context, err: unknown) => {
     if (err instanceof WikiEncountersError) return c.json({ error: err.message }, err.status as 404 | 409 | 502);
@@ -73,8 +79,7 @@ export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters, lin
     const code = store.current()?.join?.code;
     const { publicUrl, port } = links();
     if (!code) return { url: null, local: null, publicUrlSet: !!publicUrl };
-    const path = `/play/${code}`;
-    return { url: publicUrl ? new URL(path, publicUrl).href : null, local: `http://localhost:${port}${path}`, publicUrlSet: !!publicUrl };
+    return { url: publicJoinUrl({ publicUrl, port }, code), local: `http://localhost:${port}/play/${code}`, publicUrlSet: !!publicUrl };
   };
   r.get('/encounter/link', (c) => c.json(linkFor()));
   r.post('/encounter/link', (c) => {
@@ -83,6 +88,20 @@ export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters, lin
       return c.json(linkFor());
     } catch (err) {
       return failed(c, err);
+    }
+  });
+
+  r.post('/encounter/post', async (c) => {
+    const state = store.current();
+    if (!state?.join) return c.json({ error: 'No encounter is running' }, 400);
+    const url = publicJoinUrl(links(), state.join.code);
+    if (!url) return c.json({ error: 'Set the public address first (Settings → Players): players can’t open a link to this Mac' }, 409);
+    if (!bot?.postEncounter || bot.status().state !== 'ready') return c.json({ error: 'The Discord bot isn’t connected' }, 409);
+    try {
+      const where = await bot.postEncounter(joinPost(state, url));
+      return c.json({ message: `Posted in #${where.channelName}` });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 409);
     }
   });
 
