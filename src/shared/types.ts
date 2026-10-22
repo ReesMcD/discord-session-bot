@@ -302,3 +302,178 @@ export interface MusicStatus {
   /** Soundboard effects playing now (their IDs). */
   playingSounds: string[];
 }
+
+// --- Encounters ----------------------------------------------------------------------------------
+
+/** The 2024 conditions (Exhaustion has levels). */
+export type ConditionName =
+  | 'Blinded'
+  | 'Charmed'
+  | 'Deafened'
+  | 'Exhaustion'
+  | 'Frightened'
+  | 'Grappled'
+  | 'Incapacitated'
+  | 'Invisible'
+  | 'Paralyzed'
+  | 'Petrified'
+  | 'Poisoned'
+  | 'Prone'
+  | 'Restrained'
+  | 'Stunned'
+  | 'Unconscious';
+
+export interface Condition {
+  name: ConditionName;
+  /** Exhaustion only: 1–6. */
+  level?: number;
+  /** Rounds left. Absent: until removed. */
+  rounds?: number;
+  /** When `rounds` counts down: at the start or end of this combatant's turn (often the caster's). */
+  tick?: { on: 'start' | 'end'; of: string };
+}
+
+export type CombatantKind = 'pc' | 'monster' | 'npc';
+
+export interface Combatant {
+  id: string;
+  name: string;
+  kind: CombatantKind;
+  /** Null until rolled or typed in. */
+  initiative: number | null;
+  initiativeBonus: number;
+  /** Dexterity score: breaks initiative ties. */
+  dex: number | null;
+  ac: number | null;
+  hp: number | null;
+  maxHp: number | null;
+  tempHp: number;
+  conditions: Condition[];
+  /** The spell being concentrated on, if any. */
+  concentrating: string | null;
+  /** Set when damage calls for a Concentration save: its DC. Cleared when the DM records the result. */
+  concentrationCheck: number | null;
+  /** Hidden from players until revealed (an ambusher). */
+  hidden: boolean;
+  /** Monsters: the stat block's name (Bestiary page or SRD). */
+  ref?: string;
+  /** The battle map token this combatant moves. */
+  tokenId?: string;
+  /** PCs: who plays them. */
+  player?: string | null;
+}
+
+/** A monster's numbers from the wiki, for the stat block view. */
+export interface EncounterStatBlock {
+  name: string;
+  source: 'bestiary' | 'srd' | 'unknown';
+  cr?: string;
+  xp?: number;
+  size?: string;
+  type?: string;
+  ac?: number;
+  hp?: number;
+  hit_dice?: string;
+  speed?: Record<string, number | boolean>;
+  initiative?: number;
+  abilities?: number[];
+  senses?: string;
+  languages?: string;
+  resistances?: string;
+  immunities?: string;
+  traits?: Array<{ name: string; desc: string }>;
+  actions?: Array<{ name: string; kind: string; desc: string }>;
+  stat_block?: string;
+}
+
+/** An encounter in the wiki's list (ReesMcD/dnd-wiki, GET /api/encounters). */
+export interface WikiEncounterSummary {
+  id: string;
+  title: string;
+  campaign: string;
+  place: string | null;
+  difficulty: string | null;
+  party_level: number | null;
+  xp: number | null;
+  status: string;
+  run: boolean;
+  updated: string | null;
+}
+
+/** One encounter from the wiki, ready to run (GET /api/encounters/<id>). */
+export interface WikiEncounter extends WikiEncounterSummary {
+  summary: string | null;
+  read_aloud: string | null;
+  setup: string | null;
+  tactics: string | null;
+  changes: string | null;
+  treasure: string | null;
+  creatures: Array<EncounterStatBlock & { count: number }>;
+  /** The battle map, in the wiki's docs/battlemap.md format (v1). */
+  map: Record<string, unknown> | null;
+  map_error?: string;
+  party: Array<{ name: string; player: string | null; level: number | null; class: string | null; race: string | null; ac: number | null; hp: number | null; passive_perception: number | null }>;
+}
+
+export interface EncounterLogEntry {
+  at: number;
+  round: number;
+  text: string;
+}
+
+export interface EncounterState {
+  id: string;
+  title: string;
+  /** setup: adding combatants and initiative; running: turns; ended: over. */
+  status: 'setup' | 'running' | 'ended';
+  round: number;
+  /** Whose turn it is (a combatant id), while running. */
+  turn: string | null;
+  /** Combatant ids in turn order. */
+  order: string[];
+  combatants: Combatant[];
+  /** Where it came from, when loaded from the wiki. */
+  source?: { wikiId: string; campaign: string };
+  /** DM text from the wiki: read-aloud, setup, tactics, treasure. */
+  notes?: Pick<WikiEncounter, 'summary' | 'read_aloud' | 'setup' | 'tactics' | 'changes' | 'treasure'>;
+  statBlocks: Record<string, EncounterStatBlock>;
+  map: Record<string, unknown> | null;
+  startedAt: number;
+  endedAt?: number;
+  log: EncounterLogEntry[];
+}
+
+/** What happened, kept when an encounter ends. */
+export interface EncounterOutcome {
+  id: string;
+  title: string;
+  rounds: number;
+  startedAt: number;
+  endedAt: number;
+  /** Monsters and NPCs at 0 HP. */
+  defeated: string[];
+  /** PCs at 0 HP or unconscious. */
+  downed: string[];
+  /** Monsters and NPCs still standing. */
+  standing: string[];
+  text: string;
+}
+
+/** Changes to a running encounter, sent by the DM's views. */
+export type EncounterAction =
+  | { type: 'add'; combatant: { name: string; kind?: CombatantKind; ac?: number | null; hp?: number | null; initiativeBonus?: number; dex?: number | null; hidden?: boolean; ref?: string; count?: number } }
+  | { type: 'remove'; id: string }
+  | { type: 'update'; id: string; name?: string; ac?: number | null; hp?: number | null; maxHp?: number | null }
+  | { type: 'initiative'; id: string; value: number | null }
+  | { type: 'rollInitiative'; ids?: string[] }
+  | { type: 'reorder'; order: string[] }
+  | { type: 'begin' }
+  | { type: 'next' }
+  | { type: 'previous' }
+  | { type: 'damage'; id: string; amount: number }
+  | { type: 'heal'; id: string; amount: number }
+  | { type: 'tempHp'; id: string; amount: number }
+  | { type: 'condition'; id: string; name: ConditionName; remove?: boolean; level?: number; rounds?: number; tick?: { on: 'start' | 'end'; of: string } }
+  | { type: 'concentrate'; id: string; spell: string | null }
+  | { type: 'concentrationResult'; id: string; kept: boolean }
+  | { type: 'reveal'; id: string; hidden?: boolean };
