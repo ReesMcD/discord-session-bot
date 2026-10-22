@@ -12,6 +12,7 @@ export type {
   EncounterOutcome,
   EncounterStatBlock,
   EncounterState,
+  JoinLink,
   WikiEncounter,
   WikiEncounterSummary,
   Config,

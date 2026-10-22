@@ -251,7 +251,7 @@ test('the API: start from the wiki, run turns, refuse a second encounter, end it
   const old = process.env.WIKI_UPLOAD_TOKEN;
   process.env.WIKI_UPLOAD_TOKEN = TOKEN;
   try {
-    const api = createApi({ password: 'pw', dataDir: join(root, 'data'), configStore: new ConfigStore(join(root, 'config.yaml')), jobs: new JobRunner(async () => {}), wikiFetch: doFetch });
+    const api = createApi({ password: 'pw', dataDir: join(root, 'data'), configStore: new ConfigStore(join(root, 'config.yaml')), jobs: new JobRunner(async () => {}), httpFetch: doFetch });
     const call = (path: string, body?: unknown) =>
       api.request(path, { method: body === undefined ? 'GET' : 'POST', headers: { Authorization: 'Bearer pw', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 

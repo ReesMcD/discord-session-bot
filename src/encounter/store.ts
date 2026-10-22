@@ -1,9 +1,15 @@
-import { randomBytes, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { EncounterAction, EncounterOutcome, EncounterState } from '../shared/types.js';
+import type { EncounterAction, EncounterOutcome, EncounterState, JoinedPlayer, PlayerRequest } from '../shared/types.js';
+import { playerAction } from '../play/view.js';
 import { applyAction, EncounterError, newEncounter, outcomeOf, type RuleDeps } from './rules.js';
+
+/** A secret for a link or a device: 128 random bits, URL-safe. */
+const secret = () => randomBytes(16).toString('base64url');
+const hash = (token: string) => createHash('sha256').update(token).digest('hex');
+const sameSecret = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 /** Writes JSON so a crash mid-write never leaves a half file (#38). */
 function writeJsonAtomic(path: string, value: unknown) {
@@ -58,9 +64,61 @@ export class EncounterStore extends EventEmitter {
   /** Starts a new encounter: a prepared one, or a blank one with this title. Refused while one is running. */
   start(prepared: EncounterState | { title: string }): EncounterState {
     if (this.state && this.state.status !== 'ended') throw new EncounterError(`"${this.state.title}" is still running: end it first`);
-    const state = 'combatants' in prepared ? prepared : newEncounter(this.newId(), prepared.title.trim().slice(0, 80) || 'Encounter', this.deps.now());
+    const base = 'combatants' in prepared ? prepared : newEncounter(this.newId(), prepared.title.trim().slice(0, 80) || 'Encounter', this.deps.now());
+    const state: EncounterState = { ...base, join: { code: secret(), players: [] } };
     this.save(state);
     return state;
+  }
+
+  // --- Players (the public join link, #47) ------------------------------------------------------
+
+  /** The running encounter, if `code` is its join code (compared in constant time). */
+  private byCode(code: string): EncounterState | null {
+    const s = this.state;
+    return s?.join && s.status !== 'ended' && sameSecret(s.join.code, code) ? s : null;
+  }
+
+  /** Whether `code` opens the encounter running now. */
+  isOpen(code: string): boolean {
+    return !!this.byCode(code);
+  }
+
+  /** A device joins, as a PC (one device each) or as a guest; it gets a token only it knows. */
+  join(code: string, combatantId: string | null): { token: string; state: EncounterState } {
+    const s = this.byCode(code);
+    if (!s?.join) throw new EncounterError('This link has expired');
+    if (combatantId !== null) {
+      if (!s.combatants.some((c) => c.id === combatantId && c.kind === 'pc')) throw new EncounterError('No such character');
+      if (s.join.players.some((p) => p.combatantId === combatantId)) throw new EncounterError('Someone already plays that character: ask the DM for a new link if that was you on another device');
+    }
+    const token = secret();
+    const player: JoinedPlayer = { tokenHash: hash(token), combatantId, joinedAt: this.deps.now() };
+    const next = { ...s, join: { ...s.join, players: [...s.join.players, player] } };
+    this.save(next);
+    return { token, state: next };
+  }
+
+  /** The player a device token belongs to, if the code is still open. */
+  player(code: string, token: string): { state: EncounterState; player: JoinedPlayer } | null {
+    const s = this.byCode(code);
+    const tokenHash = hash(token);
+    const player = s?.join?.players.find((p) => sameSecret(p.tokenHash, tokenHash));
+    return s && player ? { state: s, player } : null;
+  }
+
+  /** A player's change to their own PC. */
+  playerAct(code: string, token: string, request: PlayerRequest): EncounterState {
+    const found = this.player(code, token);
+    if (!found) throw new EncounterError('This link has expired');
+    return this.act(playerAction(found.state, found.player.combatantId, request));
+  }
+
+  /** A fresh link: the old one stops working and everyone joins again. */
+  newJoinLink(): EncounterState {
+    if (!this.state || this.state.status === 'ended') throw new EncounterError('No encounter is running');
+    const next = { ...this.state, join: { code: secret(), players: [] } };
+    this.save(next);
+    return next;
   }
 
   newId(): string {

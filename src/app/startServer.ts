@@ -15,6 +15,8 @@ import { PROVIDERS } from '../transcription/openaiCompatible.js';
 import type { BotService } from '../bot/BotService.js';
 import { UPLOAD_TOKEN_ENV } from '../upload/recapUpload.js';
 import type { MusicControl } from '../music/control.js';
+import { EncounterStore } from '../encounter/store.js';
+import { startPlayerServer } from '../play/playerServer.js';
 
 export interface ServerOptions {
   /** Pass a function when the password can change while the server runs. */
@@ -32,6 +34,8 @@ export interface ServerOptions {
   bot?: BotService;
   /** The Mac app's music browser. */
   music?: MusicControl;
+  /** The players' server (#47) on players.port; false turns it off (tests). */
+  players?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -40,6 +44,9 @@ export interface RunningServer {
   url: string;
   jobs: JobRunner;
   configStore: ConfigStore;
+  encounters: EncounterStore;
+  /** The players' server's port, when it started. */
+  playerPort: number | null;
   close(): Promise<void>;
 }
 
@@ -64,6 +71,8 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const pruneTimer = setInterval(pruneAudio, 86_400_000);
   pruneTimer.unref();
 
+  const encounters = new EncounterStore(opts.dataDir, undefined, log);
+
   const app = new Hono();
   app.use('*', networkGuard(opts.allowLan ?? false));
   app.route(
@@ -73,6 +82,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       dataDir: opts.dataDir,
       configStore,
       jobs,
+      encounters,
       ...(opts.bot ? { bot: opts.bot } : {}),
       ...(opts.music ? { music: opts.music } : {}),
       ...(opts.corsOrigins ? { corsOrigins: opts.corsOrigins } : {}),
@@ -96,20 +106,35 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
     app.get('/', (c) => c.text('Web UI not built yet: run `npm run web:build`, then restart.'));
   }
 
+  // The players' page: a separate server that Tailscale Funnel exposes. A busy port doesn't stop the app.
+  const playerPort = configStore.read().config?.players.port ?? 4410;
+  const players =
+    opts.players === false
+      ? Promise.resolve(null)
+      : startPlayerServer(encounters, { port: playerPort, webDist }).catch((err: Error) => {
+          log(`The players' page couldn't start on port ${playerPort}: ${err.message}. Change players.port in Settings.`);
+          return null;
+        });
+
   return new Promise((resolvePromise, reject) => {
     let server: ServerType;
     try {
       server = serve({ fetch: app.fetch, port: opts.port ?? 4400, hostname: opts.host ?? '0.0.0.0' }, (info: AddressInfo) => {
-        resolvePromise({
-          port: info.port,
-          url: `http://localhost:${info.port}`,
-          jobs,
-          configStore,
-          close: () => {
-            clearInterval(pruneTimer);
-            return new Promise<void>((r) => server.close(() => r()));
-          },
-        });
+        void players.then((playerServer) =>
+          resolvePromise({
+            port: info.port,
+            url: `http://localhost:${info.port}`,
+            jobs,
+            configStore,
+            encounters,
+            playerPort: playerServer?.port ?? null,
+            close: async () => {
+              clearInterval(pruneTimer);
+              await playerServer?.close();
+              await new Promise<void>((r) => server.close(() => r()));
+            },
+          }),
+        );
       });
       server.once('error', reject);
     } catch (err) {

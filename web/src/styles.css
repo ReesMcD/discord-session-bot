@@ -372,3 +372,6 @@ a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .encounter-log li { padding: 3px 0; }
 details > summary { cursor: pointer; }
 .played { margin-bottom: 14px; }
+.join-url { display: block; margin: 10px 0; padding: 10px; overflow-wrap: anywhere; color: var(--accent); }
+.setup-steps { padding-left: 20px; }
+.setup-steps li { margin: 4px 0; }

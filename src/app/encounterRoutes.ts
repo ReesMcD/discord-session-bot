@@ -12,8 +12,17 @@ import type { EncounterAction } from '../shared/types.js';
  *   POST /encounter                          start: { wikiId, campaign? } or { title }
  *   POST /encounter/actions                  one change (EncounterAction)
  *   POST /encounter/end                      end it; answers with the summary
+ *   GET  /encounter/link                     the players' join link
+ *   POST /encounter/link                     a new link (the old one stops working)
+ *   POST /players/check                      { public_url }: does the public address reach the players' page?
  */
-export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters): Hono {
+/** Where players join: the public address (Funnel) when set, and this Mac's own address for testing. */
+export interface JoinLinks {
+  publicUrl: string | undefined;
+  port: number;
+}
+
+export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters, links: () => JoinLinks, doFetch: typeof fetch = fetch): Hono {
   const r = new Hono();
   const failed = (c: Context, err: unknown) => {
     if (err instanceof WikiEncountersError) return c.json({ error: err.message }, err.status as 404 | 409 | 502);
@@ -60,6 +69,42 @@ export function encounterRoutes(store: EncounterStore, wiki: WikiEncounters): Ho
       return failed(c, err);
     }
   });
+  const linkFor = () => {
+    const code = store.current()?.join?.code;
+    const { publicUrl, port } = links();
+    if (!code) return { url: null, local: null, publicUrlSet: !!publicUrl };
+    const path = `/play/${code}`;
+    return { url: publicUrl ? new URL(path, publicUrl).href : null, local: `http://localhost:${port}${path}`, publicUrlSet: !!publicUrl };
+  };
+  r.get('/encounter/link', (c) => c.json(linkFor()));
+  r.post('/encounter/link', (c) => {
+    try {
+      store.newJoinLink();
+      return c.json(linkFor());
+    } catch (err) {
+      return failed(c, err);
+    }
+  });
+
+  r.post('/players/check', async (c) => {
+    const { public_url } = (await c.req.json().catch(() => ({}))) as { public_url?: unknown };
+    let url: URL;
+    try {
+      url = new URL('/health', typeof public_url === 'string' ? public_url : '');
+      if (url.protocol !== 'https:') throw new Error();
+    } catch {
+      return c.json({ ok: false, message: 'Enter the https:// address Tailscale Funnel shows' });
+    }
+    try {
+      const res = await doFetch(url, { signal: AbortSignal.timeout(10_000) });
+      const body = (await res.json().catch(() => null)) as { ok?: unknown } | null;
+      if (res.ok && body?.ok === true) return c.json({ ok: true, message: 'Players can reach it' });
+      return c.json({ ok: false, message: `It answered ${res.status}, but not as the players' page: is Funnel pointing at port ${links().port}?` });
+    } catch (err) {
+      return c.json({ ok: false, message: `Couldn't reach it: ${(err as Error).message}. Is Funnel on? (tailscale funnel --bg ${links().port})` });
+    }
+  });
+
   r.post('/encounter/end', (c) => {
     try {
       return c.json(store.end());

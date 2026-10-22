@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { Combatant, CombatantKind, EncounterAction, EncounterState } from '../../types';
 import { Badge } from '../../ui';
 import { CombatantPanel } from './CombatantPanel';
+import { JoinPanel } from './JoinPanel';
 
 type Act = (action: EncounterAction) => Promise<void>;
 
@@ -48,6 +49,8 @@ export function Tracker({ state, act, onEnd }: { state: EncounterState; act: Act
           </div>
         )}
       </div>
+
+      <JoinPanel state={state} />
 
       {checks.map((c) => (
         <div key={c.id} className="card notice row spread" role="alert">

@@ -441,6 +441,16 @@ export interface EncounterState {
   startedAt: number;
   endedAt?: number;
   log: EncounterLogEntry[];
+  /** The players' join link (its secret code) and who has joined. */
+  join?: { code: string; players: JoinedPlayer[] };
+}
+
+/** A device that joined through the link. Only a hash of its token is kept. */
+export interface JoinedPlayer {
+  tokenHash: string;
+  /** The PC they play, or null for a guest who watches. */
+  combatantId: string | null;
+  joinedAt: number;
 }
 
 /** What happened, kept when an encounter ends. */
@@ -477,3 +487,56 @@ export type EncounterAction =
   | { type: 'concentrate'; id: string; spell: string | null }
   | { type: 'concentrationResult'; id: string; kept: boolean }
   | { type: 'reveal'; id: string; hidden?: boolean };
+
+// --- The player view (the public join link) ------------------------------------------------------
+
+/** How a monster or NPC looks to players: never its numbers. */
+export type Health = 'healthy' | 'bloodied' | 'down';
+
+export interface PlayerCombatant {
+  id: string;
+  name: string;
+  kind: CombatantKind;
+  current: boolean;
+  /** The PCs' numbers; null for monsters and NPCs. */
+  hp: number | null;
+  maxHp: number | null;
+  tempHp: number;
+  /** Monsters and NPCs: how hurt they look. */
+  health: Health | null;
+  conditions: Condition[];
+  concentrating: string | null;
+}
+
+/** What one player's device gets: no hidden combatants, no monster numbers, no DM notes. */
+export interface PlayerView {
+  title: string;
+  status: EncounterState['status'];
+  round: number;
+  /** Whose turn it is, when that combatant is visible. */
+  turn: string | null;
+  /** The PC this device plays, or null for a guest. */
+  me: string | null;
+  order: PlayerCombatant[];
+  /** For the join screen: the PCs, and whether a device already plays each. */
+  party: Array<{ id: string; name: string; taken: boolean }>;
+  /** My own initiative, while the DM is collecting them. */
+  myInitiative: number | null;
+  /** My AC (only mine). */
+  myAc: number | null;
+}
+
+/** What a player may change, and only on their own PC. */
+export type PlayerRequest =
+  | { type: 'initiative'; value: number }
+  | { type: 'damage' | 'heal' | 'tempHp'; amount: number }
+  | { type: 'condition'; name: ConditionName; remove?: boolean };
+
+/** GET /encounter/link: where players join. */
+export interface JoinLink {
+  /** The public link (Tailscale Funnel), when players.public_url is set. */
+  url: string | null;
+  /** The same page on this Mac, for trying it out. */
+  local: string | null;
+  publicUrlSet: boolean;
+}
