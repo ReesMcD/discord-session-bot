@@ -21,7 +21,15 @@ const effects = new Map<string, Set<AudioBufferSourceNode>>();
 /** Decoded effects, by sound ID and size, so a replay starts at once. */
 const decoded = new Map<string, AudioBuffer>();
 
-const busy = () => sources.size > 0 || effects.size > 0;
+// Spotify Connect: chunks of 44.1 kHz float stereo from librespot, scheduled back to back (Web
+// Audio resamples them to the mix's 48 kHz).
+const feedGain = ctx.createGain();
+feedGain.connect(master);
+let feedAt = 0;
+let feeding = false;
+let feedTimer: ReturnType<typeof setTimeout> | undefined;
+
+const busy = () => sources.size > 0 || effects.size > 0 || feeding;
 /** Tells the main process when the mix goes quiet (no tabs, no effects), so the bot stops playing. */
 let wasBusy = false;
 function reportActivity(): void {
@@ -125,6 +133,37 @@ ipcRenderer.on('music:sfx', async (_e, { id, audio, gain }: { id: string; audio:
     ipcRenderer.send('music:error', id, `couldn't play this sound: ${(err as Error).message}`);
   }
 });
+
+ipcRenderer.on('music:feed', async (_e, data: Uint8Array) => {
+  await ready;
+  const samples = new Float32Array(data.slice().buffer);
+  const frames = samples.length / 2;
+  if (!frames) return;
+  const buffer = ctx.createBuffer(2, frames, 44_100);
+  const left = buffer.getChannelData(0);
+  const right = buffer.getChannelData(1);
+  for (let i = 0; i < frames; i++) {
+    left[i] = samples[i * 2]!;
+    right[i] = samples[i * 2 + 1]!;
+  }
+  const now = ctx.currentTime;
+  // Starting (or after a pause): a small cushion. Far ahead means a backlog: drop rather than pile up.
+  if (feedAt < now + 0.02) feedAt = now + 0.15;
+  if (feedAt > now + 3) return;
+  const node = ctx.createBufferSource();
+  node.buffer = buffer;
+  node.connect(feedGain);
+  node.start(feedAt);
+  feedAt += buffer.duration;
+  feeding = true;
+  reportActivity();
+  clearTimeout(feedTimer);
+  feedTimer = setTimeout(() => {
+    feeding = false;
+    reportActivity();
+  }, Math.max(0, (feedAt - now) * 1000) + 1500);
+});
+ipcRenderer.on('music:feed-gain', (_e, value: number) => feedGain.gain.setTargetAtTime(value, ctx.currentTime, 0.05));
 
 ipcRenderer.on('music:sfx-stop', () => {
   for (const playing of effects.values()) for (const node of playing) node.stop();

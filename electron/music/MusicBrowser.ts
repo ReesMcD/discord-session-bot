@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, WebContentsView, ipcMain, type Rectangle } from 'electron';
 import type { MusicControl, MusicStatus, MusicTab } from '../../src/music/control.js';
+import { SpotifyConnect } from './SpotifyConnect.js';
 
 interface Tab {
   id: string;
@@ -23,6 +24,8 @@ export interface MusicBrowserOptions {
   onSilence: () => void;
   inChannel: () => boolean;
   log: (msg: string) => void;
+  /** Spotify Connect: the speaker's name and where its login is kept. */
+  spotify: { name: string; dir: string };
 }
 
 /** Tabs share one browser profile, so logins (YouTube, Spotify…) are remembered between launches. */
@@ -46,6 +49,7 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
   private shown: { win: BrowserWindow; bounds: Rectangle } | undefined;
   /** The window the active tab was last shown in, to take it back from when the page closes. */
   private lastWin: BrowserWindow | undefined;
+  private spotify!: SpotifyConnect;
 
   constructor(private readonly opts: MusicBrowserOptions) {
     super();
@@ -74,6 +78,19 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
       this.changed();
     });
     await this.capture.loadFile(this.opts.capturePage);
+    this.spotify = new SpotifyConnect({
+      ...this.opts.spotify,
+      onAudio: (chunk) => this.capture.webContents.send('music:feed', new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)),
+      onChange: () => this.changed(),
+      log: this.opts.log,
+    });
+    this.capture.webContents.send('music:feed-gain', this.spotify.volume);
+    this.spotify.start();
+  }
+
+  updateSpotify(patch: { enabled?: boolean; volume?: number; muted?: boolean }): void {
+    this.spotify.update(patch);
+    this.capture.webContents.send('music:feed-gain', this.spotify.volume);
   }
 
   status(): MusicStatus {
@@ -86,6 +103,7 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
         (t): MusicTab => ({ id: t.id, title: t.title, url: t.url, volume: t.volume, muted: t.muted, audible: t.audible, active: t.id === this.activeId }),
       ),
       playingSounds: this.playingSounds,
+      spotify: this.spotify?.status() ?? null,
     };
   }
 
@@ -214,6 +232,7 @@ export class MusicBrowser extends EventEmitter implements MusicControl {
   }
 
   close(): void {
+    this.spotify?.stop();
     for (const id of [...this.tabs.keys()]) this.closeTab(id);
     this.capture?.destroy();
     this.host?.destroy();

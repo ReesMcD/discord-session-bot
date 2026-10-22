@@ -1,6 +1,6 @@
 import type { MusicStatus } from '../shared/types.js';
 
-export type { MusicStatus, MusicTab } from '../shared/types.js';
+export type { MusicStatus, MusicTab, SpotifyStatus } from '../shared/types.js';
 
 /** What the API needs from the Mac app's music browser (a fake implements it in tests). */
 export interface MusicControl {
@@ -17,6 +17,8 @@ export interface MusicControl {
   /** Plays an audio file once over the music. */
   playSound(id: string, audio: Uint8Array, volume: number): void;
   stopSounds(): void;
+  /** Spotify Connect: turn the speaker on or off, and its volume in the mix. */
+  updateSpotify(patch: { enabled?: boolean; volume?: number; muted?: boolean }): void;
   on(event: 'status', listener: (s: MusicStatus) => void): unknown;
   off(event: 'status', listener: (s: MusicStatus) => void): unknown;
 }

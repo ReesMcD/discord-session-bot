@@ -9,7 +9,8 @@ import prism from 'prism-media';
 import { createApi } from '../src/app/api.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner } from '../src/app/jobs.js';
-import { normalizeUrl, type MusicControl, type MusicStatus, type MusicTab } from '../src/music/control.js';
+import { normalizeUrl, type MusicControl, type MusicStatus, type MusicTab, type SpotifyStatus } from '../src/music/control.js';
+import { musicRoutes } from '../src/app/musicRoutes.js';
 import { opusPacketSamples } from '../src/audio/opus.js';
 import { FRAME_BYTES, FRAME_SAMPLES, MusicBroadcast } from '../src/music/broadcast.js';
 import { PCM_WORKLET_NAME, PCM_WORKLET_SOURCE } from '../src/music/pcmWorklet.js';
@@ -49,8 +50,13 @@ class FakeMusic extends EventEmitter implements MusicControl {
   tabs: MusicTab[] = [];
   master = 1;
   monitor = true;
+  spotify: SpotifyStatus = { state: 'ready', device: 'Scrying Eye', track: null, volume: 1, muted: false };
   status(): MusicStatus {
-    return { available: true, inChannel: false, master: this.master, monitor: this.monitor, tabs: this.tabs, playingSounds: [] };
+    return { available: true, inChannel: false, master: this.master, monitor: this.monitor, tabs: this.tabs, playingSounds: [], spotify: this.spotify };
+  }
+  updateSpotify(patch: { enabled?: boolean; volume?: number; muted?: boolean }) {
+    const { enabled, ...rest } = patch;
+    Object.assign(this.spotify, rest, enabled === false ? { state: 'off' } : enabled ? { state: 'ready' } : {});
   }
   openTab(url: string) {
     const id = String(this.tabs.length + 1);
@@ -96,7 +102,7 @@ test('music API: open, adjust and close tabs, set the mix; unavailable without t
     api.request(path, { method, headers: { Authorization: 'Bearer pw-12345678', 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
 
   const none = make();
-  assert.deepEqual(await (await call(none, 'GET', '/music')).json(), { available: false, inChannel: false, master: 1, monitor: true, tabs: [], playingSounds: [] });
+  assert.deepEqual(await (await call(none, 'GET', '/music')).json(), { available: false, inChannel: false, master: 1, monitor: true, tabs: [], playingSounds: [], spotify: null });
   assert.equal((await call(none, 'POST', '/music/tabs', { url: 'x.com' })).status, 409);
 
   const fake = new FakeMusic();
@@ -240,4 +246,36 @@ test('without the Mac app the library can be edited but nothing plays', async ()
   assert.deepEqual(scene.tabs, [{ url: 'https://tabletopaudio.com/combat', volume: 0.7 }]);
   assert.equal((await call('POST', `/music/scenes/${scene.id}/play`, {})).status, 409);
   assert.equal((await call('POST', '/music/sounds/stop')).status, 409);
+});
+
+test('Spotify Connect: found where Homebrew puts it, its log read for the track, audio cut into whole chunks', async () => {
+  const { CHUNK_FRAMES, FrameChunker, findLibrespot, librespotArgs, parseLibrespotLine } = await import('../src/music/spotify.js');
+  assert.equal(findLibrespot('/usr/bin:/bin', (p) => p === '/opt/homebrew/bin/librespot'), '/opt/homebrew/bin/librespot');
+  assert.equal(findLibrespot('/Users/me/.cargo/bin', (p) => p === '/Users/me/.cargo/bin/librespot'), '/Users/me/.cargo/bin/librespot');
+  assert.equal(findLibrespot('/usr/bin', () => false), undefined);
+  const args = librespotArgs('Scrying Eye', '/data/spotify');
+  assert.deepEqual([args[args.indexOf('--backend') + 1], args[args.indexOf('--format') + 1], args[args.indexOf('--name') + 1]], ['pipe', 'F32', 'Scrying Eye']);
+  assert.ok(!args.includes('--device'), 'no device: the pipe writes to stdout');
+
+  assert.deepEqual(parseLibrespotLine('[2026-10-22T18:00:00Z INFO  librespot_playback::player] Loading <Tavern Brawl> with Spotify URI <spotify:track:abc>'), { kind: 'track', title: 'Tavern Brawl' });
+  assert.deepEqual(parseLibrespotLine('[2026-10-22T18:00:00Z INFO  librespot_core::session] Authenticated as "rees" !'), { kind: 'connected' });
+  assert.deepEqual(parseLibrespotLine('[2026-10-22T18:00:00Z ERROR librespot_core::session] Connection failed: timed out'), { kind: 'error', message: 'Connection failed: timed out' });
+  assert.equal(parseLibrespotLine('[2026-10-22T18:00:00Z DEBUG librespot_audio] fetch'), null);
+
+  const chunker = new FrameChunker();
+  const size = CHUNK_FRAMES * 8;
+  assert.deepEqual(chunker.push(Buffer.alloc(size - 3)), []);
+  const out = chunker.push(Buffer.alloc(size + 10));
+  assert.deepEqual(out.map((b) => b.length), [size, size]);
+  assert.equal(chunker.push(Buffer.alloc(size - 7)).length, 1, 'the leftover 7 bytes complete the next chunk');
+});
+
+test('the Spotify route checks its input', async () => {
+  const fake = new FakeMusic();
+  const app = musicRoutes(fake, new MusicLibrary(mkdtempSync(join(tmpdir(), 'music-'))));
+  const patch = (body: object) => app.request('/spotify', { method: 'PATCH', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+  assert.equal((await patch({ volume: 2 })).status, 400);
+  const s = (await (await patch({ volume: 0.4, muted: true })).json()) as MusicStatus;
+  assert.deepEqual([s.spotify?.volume, s.spotify?.muted], [0.4, true]);
+  assert.equal(((await (await patch({ enabled: false })).json()) as MusicStatus).spotify?.state, 'off');
 });

@@ -18,7 +18,7 @@ export function musicRoutes(control: MusicControl | undefined, library: MusicLib
     }
     return c.json(library.read());
   };
-  const noMusic: MusicStatus = { available: false, inChannel: false, master: 1, monitor: true, tabs: [], playingSounds: [] };
+  const noMusic: MusicStatus = { available: false, inChannel: false, master: 1, monitor: true, tabs: [], playingSounds: [], spotify: null };
   const unit = (v: unknown) => (typeof v === 'number' && v >= 0 && v <= 1 ? v : undefined);
   music.get('/', (c) => c.json(control?.status() ?? noMusic));
   music.post('/tabs', async (c) => {
@@ -47,6 +47,17 @@ export function musicRoutes(control: MusicControl | undefined, library: MusicLib
   music.delete('/tabs/:id', (c) => {
     if (!control) return c.json(needsMac, 409);
     control.closeTab(c.req.param('id'));
+    return c.json(control.status());
+  });
+  music.patch('/spotify', async (c) => {
+    if (!control) return c.json(needsMac, 409);
+    const body = (await c.req.json().catch(() => ({}))) as { enabled?: unknown; volume?: unknown; muted?: unknown };
+    if (body.volume !== undefined && unit(body.volume) === undefined) return c.json({ error: 'volume must be between 0 and 1' }, 400);
+    control.updateSpotify({
+      ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+      ...(body.volume !== undefined ? { volume: body.volume as number } : {}),
+      ...(typeof body.muted === 'boolean' ? { muted: body.muted } : {}),
+    });
     return c.json(control.status());
   });
   music.patch('/', async (c) => {

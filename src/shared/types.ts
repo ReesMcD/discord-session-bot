@@ -325,6 +325,24 @@ export interface MusicStatus {
   tabs: MusicTab[];
   /** Soundboard effects playing now (their IDs). */
   playingSounds: string[];
+  /** Spotify Connect, in the Mac app; null elsewhere. */
+  spotify: SpotifyStatus | null;
+}
+
+/** The Mac app as a Spotify Connect speaker (librespot), mixed in like a tab. */
+export interface SpotifyStatus {
+  /**
+   * missing: librespot isn't installed; off: turned off here; ready: pick the speaker in Spotify;
+   * playing: sound is coming in; error: it stopped (see `error`).
+   */
+  state: 'missing' | 'off' | 'ready' | 'playing' | 'error';
+  /** The speaker's name in the Spotify app. */
+  device: string;
+  /** The track it last loaded. */
+  track: string | null;
+  volume: number;
+  muted: boolean;
+  error?: string;
 }
 
 // --- Encounters ----------------------------------------------------------------------------------

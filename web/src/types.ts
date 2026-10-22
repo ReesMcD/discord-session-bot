@@ -30,6 +30,7 @@ export type {
   MusicSound,
   MusicStatus,
   MusicTab,
+  SpotifyStatus,
   DiscordAccount,
   DndBeyondCharacter,
   PromptInfo,
