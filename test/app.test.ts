@@ -78,7 +78,7 @@ test('only this Mac and Tailscale addresses are let in by default', async () => 
   for (const a of ['192.168.1.20', '10.0.0.5', '::ffff:192.168.1.20', '100.63.0.1', '100.128.0.1', 'fe80::1', '2001:db8::1']) assert.ok(!isLocalOrTailscale(a), a);
 
   const root = mkdtempSync(join(tmpdir(), 'app-'));
-  const server = await startServer({ password: PASSWORD, port: 0, host: '127.0.0.1', dataDir: root, configPath: join(root, 'c.yaml'), webDist: join(root, 'none'), log: () => {} });
+  const server = await startServer({ password: PASSWORD, port: 0, host: '127.0.0.1', dataDir: root, configPath: join(root, 'c.yaml'), webDist: join(root, 'none'), players: false, log: () => {} });
   try {
     const res = await fetch(`http://127.0.0.1:${server.port}/api/health`, { headers: { Authorization: `Bearer ${PASSWORD}` } });
     assert.equal(res.status, 200, 'loopback is allowed through the real server');

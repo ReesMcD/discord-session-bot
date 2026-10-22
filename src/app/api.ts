@@ -40,8 +40,8 @@ export interface ApiOptions {
   signInLimiter?: SignInLimiter;
   /** The encounter being run (default: one kept in dataDir). */
   encounters?: EncounterStore;
-  /** For tests: the HTTP client the wiki's encounter list uses. */
-  wikiFetch?: typeof fetch;
+  /** For tests: the HTTP client for calls out (the wiki's encounters, the join link check). */
+  httpFetch?: typeof fetch;
 }
 
 const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize', 'upload'];
@@ -53,7 +53,7 @@ export function createApi(opts: ApiOptions): Hono {
     opts.dataDir,
     () => configSchema.parse(opts.configStore.read().config ?? {}),
     () => process.env[UPLOAD_TOKEN_ENV],
-    opts.wikiFetch,
+    opts.httpFetch,
   );
   if (opts.corsOrigins?.length) {
     api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
@@ -191,7 +191,18 @@ export function createApi(opts: ApiOptions): Hono {
   });
 
   api.route('/music', musicRoutes(opts.music, new MusicLibrary(opts.dataDir)));
-  api.route('/', encounterRoutes(encounters, wikiEncounters));
+  api.route(
+    '/',
+    encounterRoutes(
+      encounters,
+      wikiEncounters,
+      () => {
+        const players = configSchema.parse(opts.configStore.read().config ?? {}).players;
+        return { publicUrl: players.public_url, port: players.port };
+      },
+      opts.httpFetch,
+    ),
+  );
 
   // --- Config -----------------------------------------------------------------------------------
   /** Sends a test request with the upload settings given (unsaved edits included). */
