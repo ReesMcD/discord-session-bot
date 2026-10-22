@@ -26,11 +26,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install ffmpeg
-        run: |
-          if command -v ffmpeg >/dev/null; then exit 0; fi
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update -q && sudo apt-get install -yq ffmpeg; else brew install ffmpeg; fi
       - run: npm ci
+      # The ffmpeg tests use the ffmpeg-static binary npm just installed: apt's ffmpeg took
+      # 30 minutes on ubuntu runners. It has libopus and flac, all the tests need.
+      - name: Use the bundled ffmpeg
+        run: |
+          FFMPEG_PATH="$(node -p "require('ffmpeg-static')")"
+          VERSION="$("$FFMPEG_PATH" -version)"; echo "${VERSION%%$'\n'*}"
+          echo "FFMPEG_PATH=$FFMPEG_PATH" >> "$GITHUB_ENV"
       - run: npm run check:deps
       - run: npm run typecheck
       - run: npm test
