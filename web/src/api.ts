@@ -42,6 +42,13 @@ export const auth = {
   },
 };
 
+/** A file from the API (an image), with the password, as a blob. */
+export async function apiBlob(path: string): Promise<Blob> {
+  const res = await fetch(BASE + path, { headers: { Authorization: `Bearer ${password}` } });
+  if (!res.ok) throw new ApiError(res.status, null);
+  return res.blob();
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,

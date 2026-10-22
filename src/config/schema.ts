@@ -194,6 +194,18 @@ export const configObject = z
      * The players' join link (#47). Scrying Eye serves only the player page on this port, on this
      * Mac alone (127.0.0.1); Tailscale Funnel makes it public: `tailscale funnel --bg <port>`.
      */
+    /** Battle map art (#61). */
+    battle_maps: z
+      .object({
+        /**
+         * A folder of map art on this Mac (Forgotten Adventures packs, or anything named like them).
+         * Read in place and shown only to your own game: never copied, uploaded or bundled.
+         */
+        assets_dir: z.string().min(1).optional(),
+      })
+      .strict()
+      .prefault({}),
+
     players: z
       .object({
         /** The public address Funnel gives this Mac, e.g. https://my-mac.tail1234.ts.net. */

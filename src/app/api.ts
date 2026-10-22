@@ -22,6 +22,7 @@ import { EncounterStore } from '../encounter/store.js';
 import { WikiEncounters } from '../encounter/wiki.js';
 import type { DndBeyondCharacter, EncounterState } from '../shared/types.js';
 import { DndBeyondError, lookupCharacter } from '../dndbeyond/characters.js';
+import { artImage, MapArt } from '../battlemap/library.js';
 
 export interface ApiOptions {
   password: PasswordSource;
@@ -46,6 +47,8 @@ export interface ApiOptions {
   httpFetch?: typeof fetch;
   /** The wiki's encounters (default: from the upload settings and WIKI_UPLOAD_TOKEN). */
   wikiEncounters?: WikiEncounters;
+  /** Battle map art from the folder in the settings (default: one reading the settings). */
+  mapArt?: MapArt;
 }
 
 /** The wiki's encounters, from the same address and key as recap uploads. */
@@ -59,6 +62,7 @@ export function createApi(opts: ApiOptions): Hono {
   const api = new Hono();
   const encounters = opts.encounters ?? new EncounterStore(opts.dataDir);
   const wikiEncounters = opts.wikiEncounters ?? wikiEncountersFor(opts.dataDir, opts.configStore, opts.httpFetch);
+  const mapArt = opts.mapArt ?? new MapArt(() => opts.configStore.read().config?.battle_maps.assets_dir);
   if (opts.corsOrigins?.length) {
     api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
   }
@@ -154,6 +158,12 @@ export function createApi(opts: ApiOptions): Hono {
     }
     return c.json({ ...sessionDetail(opts.dataDir, id, opts.configStore.read().config)!, jobs: opts.jobs.list(id) });
   });
+
+  /** Battle map art: the folder's index, the running encounter's pictures, and the images. */
+  api.get('/art/status', (c) => c.json(mapArt.status()));
+  api.post('/art/reindex', (c) => c.json(mapArt.reindex()));
+  api.get('/encounter/art', (c) => c.json(mapArt.plan(encounters.current()?.map ?? null)));
+  api.get('/art/:id', (c) => artImage(mapArt.file(c.req.param('id'))));
 
   /** A public D&D Beyond character (and its campaign's other characters), to add characters from. */
   const characterCache = new Map<number, { at: number; value: DndBeyondCharacter }>();

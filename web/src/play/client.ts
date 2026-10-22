@@ -1,4 +1,4 @@
-import type { PlayerRequest, PlayerView } from '../../../src/shared/types';
+import type { ArtPlan, PlayerRequest, PlayerView } from '../../../src/shared/types';
 
 /** The join code is the last part of /play/<code>. */
 export const code = decodeURIComponent(window.location.pathname.split('/').filter(Boolean).at(-1) ?? '');
@@ -49,6 +49,14 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export const play = {
   view: () => call<PlayerView>('/view'),
+  art: () => call<ArtPlan | null>('/art'),
+  /** One of the map's pictures. */
+  artImage: async (id: string): Promise<Blob> => {
+    const token = device.token;
+    const res = await fetch(`/p/${encodeURIComponent(code)}/art/${encodeURIComponent(id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new PlayError(res.status, `Error ${res.status}`);
+    return res.blob();
+  },
   join: (combatantId: string | null) => call<{ token: string; view: PlayerView }>('/join', { method: 'POST', body: JSON.stringify({ combatantId }) }),
   act: (request: PlayerRequest) => call<PlayerView>('/act', { method: 'POST', body: JSON.stringify(request) }),
 };

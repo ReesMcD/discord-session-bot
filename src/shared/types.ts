@@ -571,6 +571,28 @@ export type PlayerRequest =
   /** Moves my own token. */
   | { type: 'move'; at: Cell };
 
+/**
+ * The pictures a battle map gets from the art folder (#61), by asset id: the ground, floor and
+ * water tiles and props by their index in `terrain`, and decals. What has none is drawn plainly.
+ */
+export interface ArtPlan {
+  ground?: string;
+  tiles: Record<number, string>;
+  /** `each`: one picture per square (a row of trees), else one over the feature's squares (a wagon). */
+  props: Record<number, { id: string; each: boolean }>;
+  decals: Array<{ id: string; at: Cell; size: Cell; rotate: number }>;
+  /** Every asset the plan uses: the only ones players may fetch. */
+  ids: string[];
+}
+
+/** GET /art/status: the art folder and its index. */
+export interface ArtStatus {
+  dir: string | null;
+  files: number;
+  indexedAt: number | null;
+  error: string | null;
+}
+
 /** GET /encounter/link: where players join. */
 export interface JoinLink {
   /** The public link (Tailscale Funnel), when players.public_url is set. */

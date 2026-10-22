@@ -446,6 +446,13 @@ What's in it:
     and refuses walls, closed doors, deep water and occupied squares. **Doors** opens, closes and
     locks them; **Difficult** marks or clears squares; combatants without a token are placed with a
     tap. A blank encounter can get a blank grid. Pinch or scroll to zoom, drag the map to pan.
+  - **Map art:** point **Settings → Battle maps** at a folder of map art on this Mac, like the
+    [Forgotten Adventures](https://www.forgotten-adventures.net/) packs. Pictures are matched by
+    file name (`Tree_Oak_A1_2x2.png` is a 2×2 oak; textures for grass, road, water): first a file
+    the wiki's map names, then its `asset` words, then the map's style. Anything without a match
+    is drawn plainly, and the rules always come from the map, never the pictures. The files stay
+    in that folder: players' phones get only the pictures on the map in play, and they're never
+    copied, uploaded or bundled into the app (FA's free packs are for personal use).
   - It survives an app restart, and every open view updates live.
 - **Players' link**: players follow the fight on their phone or in a browser, with nothing to
   install.

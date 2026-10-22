@@ -10,6 +10,7 @@ import { clientAddress } from '../app/network.js';
 import { EncounterError } from '../encounter/rules.js';
 import type { EncounterStore } from '../encounter/store.js';
 import type { EncounterState, PlayerRequest } from '../shared/types.js';
+import { artImage, type MapArt } from '../battlemap/library.js';
 import { playerView } from './view.js';
 
 /**
@@ -22,6 +23,8 @@ import { playerView } from './view.js';
  *   GET  /p/:code/events          the same, live (server-sent events)
  *   POST /p/:code/join            { combatantId | null } → { token }  (one device per PC)
  *   POST /p/:code/act             a PlayerRequest on your own PC
+ *   GET  /p/:code/art             the map's pictures (from the DM's art folder), if any
+ *   GET  /p/:code/art/:id         one of those pictures, and only those
  *
  * Devices send their token as `Authorization: Bearer <token>`.
  */
@@ -74,7 +77,7 @@ const bearer = (c: Context) => {
   return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
 };
 
-export function playerApp(store: EncounterStore, opts: { webDist: string; limiter?: RateLimiter }): Hono {
+export function playerApp(store: EncounterStore, opts: { webDist: string; limiter?: RateLimiter; art?: MapArt }): Hono {
   const app = new Hono();
   const limiter = opts.limiter ?? new RateLimiter();
   const webDist = resolve(opts.webDist);
@@ -135,6 +138,17 @@ export function playerApp(store: EncounterStore, opts: { webDist: string; limite
     });
   });
 
+  app.get('/p/:code/art', (c) => {
+    const v = viewFor(c, c.req.param('code'));
+    return v instanceof Response ? v : c.json(opts.art?.plan(v.state.map) ?? null);
+  });
+  app.get('/p/:code/art/:id', (c) => {
+    const v = viewFor(c, c.req.param('code'));
+    if (v instanceof Response) return v;
+    const plan = opts.art?.plan(v.state.map);
+    return artImage(plan ? opts.art!.file(c.req.param('id'), new Set(plan.ids)) : undefined);
+  });
+
   app.post('/p/:code/join', async (c) => {
     const code = c.req.param('code');
     if (!store.isOpen(code)) return gone(c);
@@ -179,8 +193,8 @@ export function playerApp(store: EncounterStore, opts: { webDist: string; limite
 }
 
 /** Starts the player server on 127.0.0.1:<port>. */
-export function startPlayerServer(store: EncounterStore, opts: { port: number; webDist: string }): Promise<{ port: number; close(): Promise<void> }> {
-  const app = playerApp(store, { webDist: opts.webDist });
+export function startPlayerServer(store: EncounterStore, opts: { port: number; webDist: string; art?: MapArt }): Promise<{ port: number; close(): Promise<void> }> {
+  const app = playerApp(store, { webDist: opts.webDist, ...(opts.art ? { art: opts.art } : {}) });
   return new Promise((resolvePromise, reject) => {
     let server: ServerType;
     try {

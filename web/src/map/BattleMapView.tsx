@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { canPlace, cellsOf, distanceFeet, SIZE_SQUARES, tokenAt, type BattleMap, type Cell, type MapToken, type Terrain } from '../../../src/shared/battlemap';
+import type { ArtPlan } from '../../../src/shared/types';
 import './map.css';
 
 /** What the tracker knows about a token's combatant, for drawing it. */
@@ -27,7 +28,13 @@ interface Props {
   /** The DM's notes on the map. */
   showNotes?: boolean;
   label: string;
+  /** Pictures from the DM's art folder, and how to fetch one. Without them the map is drawn plainly. */
+  art?: ArtPlan | null;
+  loadArt?: (id: string) => Promise<Blob>;
 }
+
+/** Decoded pictures, shared by every map on the page (ids are stable per file). */
+const images = new Map<string, ImageBitmap | 'loading' | 'failed'>();
 
 type View = { scale: number; ox: number; oy: number };
 type Drag = { pointer: number; tokenId: string; from: Cell; to: Cell; startX: number; startY: number; moved: boolean };
@@ -54,6 +61,29 @@ export function BattleMapView(props: Props) {
   latest.current = props;
   const frame = useRef(0);
 
+  // Fetch the pictures the plan uses; redraw as each arrives.
+  const artIds = props.art?.ids.join(',') ?? '';
+  useEffect(() => {
+    const load = latest.current.loadArt;
+    if (!load) return;
+    let live = true;
+    for (const id of latest.current.art?.ids ?? []) {
+      if (images.has(id)) continue;
+      images.set(id, 'loading');
+      load(id)
+        .then((blob) => createImageBitmap(blob))
+        .then(
+          (bitmap) => images.set(id, bitmap),
+          () => images.set(id, 'failed'),
+        )
+        .then(() => live && redraw());
+    }
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artIds]);
+
   const redraw = () => {
     cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => draw());
@@ -68,11 +98,13 @@ export function BattleMapView(props: Props) {
     if (!el) return;
     const { map, info } = latest.current;
     const whole = Math.min(el.clientWidth / map.width, el.clientHeight / map.height);
-    if (whole >= MIN_TOUCH_SQUARE) {
+    // A mouse can hit small squares; a finger can't.
+    const smallest = window.matchMedia?.('(pointer: coarse)').matches ? MIN_TOUCH_SQUARE : 10;
+    if (whole >= smallest) {
       view.current = { scale: whole, ox: (el.clientWidth - map.width * whole) / 2, oy: (el.clientHeight - map.height * whole) / 2 };
       return;
     }
-    const scale = MIN_TOUCH_SQUARE;
+    const scale = smallest;
     const focus = map.tokens.find((t) => info[t.id]?.mine) ?? map.tokens.find((t) => info[t.id]?.current);
     const [fx, fy] = focus ? [focus.at[0] + SIZE_SQUARES[focus.size] / 2, focus.at[1] + SIZE_SQUARES[focus.size] / 2] : [map.width / 2, map.height / 2];
     view.current = { scale, ox: el.clientWidth / 2 - fx * scale, oy: el.clientHeight / 2 - fy * scale };
@@ -91,21 +123,53 @@ export function BattleMapView(props: Props) {
     }
     const ctx = c.getContext('2d');
     if (!ctx) return;
-    const { map, info, selected, showNotes } = latest.current;
+    const { map, info, selected, showNotes, art } = latest.current;
+    const picture = (id: string | undefined) => {
+      const img = id ? images.get(id) : undefined;
+      return img && img !== 'loading' && img !== 'failed' ? img : undefined;
+    };
     const colors = palette(el);
     const { scale: s, ox, oy } = view.current;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.translate(ox, oy);
 
-    // Ground, then terrain in the format's order.
+    // Ground, then terrain in the format's order: pictures where the art folder has them.
     ctx.fillStyle = groundColor(map.ground, colors);
     ctx.fillRect(0, 0, map.width * s, map.height * s);
+    const groundImage = picture(art?.ground);
+    if (groundImage) for (let y = 0; y < map.height; y++) for (let x = 0; x < map.width; x++) ctx.drawImage(groundImage, x * s, y * s, s, s);
     for (const kind of DRAW_ORDER) {
-      for (const t of map.terrain) {
-        if (t.kind !== kind) continue;
-        for (const [x, y] of cellsOf(t, map.width, map.height)) paintCell(ctx, t, x, y, s, colors);
-      }
+      map.terrain.forEach((t, i) => {
+        if (t.kind !== kind) return;
+        const cells = cellsOf(t, map.width, map.height);
+        const tile = picture(art?.tiles[i]);
+        const prop = art?.props[i];
+        const sprite = picture(prop?.id);
+        if (tile) for (const [x, y] of cells) ctx.drawImage(tile, x * s, y * s, s, s);
+        else if (sprite && prop) {
+          if (prop.each) for (const [x, y] of cells) ctx.drawImage(sprite, x * s, y * s, s, s);
+          else {
+            const xs = cells.map((c) => c[0]);
+            const ys = cells.map((c) => c[1]);
+            const x0 = Math.min(...xs);
+            const y0 = Math.min(...ys);
+            ctx.drawImage(sprite, x0 * s, y0 * s, (Math.max(...xs) - x0 + 1) * s, (Math.max(...ys) - y0 + 1) * s);
+          }
+        } else for (const [x, y] of cells) paintCell(ctx, t, x, y, s, colors);
+        // Difficult ground stays visible over any picture: it's a rule.
+        if (kind === 'difficult' && tile) for (const [x, y] of cells) paintCell(ctx, t, x, y, s, colors);
+      });
+    }
+    for (const d of art?.decals ?? []) {
+      const img = picture(d.id);
+      if (!img) continue;
+      const [w, h] = d.size;
+      ctx.save();
+      ctx.translate((d.at[0] + w / 2) * s, (d.at[1] + h / 2) * s);
+      ctx.rotate((d.rotate * Math.PI) / 180);
+      ctx.drawImage(img, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
+      ctx.restore();
     }
 
     // Grid.
