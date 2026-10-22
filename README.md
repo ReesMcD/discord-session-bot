@@ -56,7 +56,7 @@ run → Artifacts**, and you need to be signed in to GitHub to download it. Tagg
 | Record a call: join a voice channel, one track per speaker, ignore bots/people | Mac app menu bar, or the app's Record tab | Ready, awaiting the first live test ([TESTING.md](TESTING.md)) |
 | Live transcript during the call (optional) | Record page, on the Mac and your phone; turn on under Settings → Transcription | Ready, awaiting a live test |
 | Transcribe (Groq Whisper) | Automatic after a recording, or the session's **Transcribe** button, or `npm run transcribe` | Ready |
-| Label speakers on shared accounts | **Label speakers** button, or `npm run disambiguate` | Ready |
+| Label speakers on shared mics | **Label speakers** button, or `npm run disambiguate` | Ready |
 | Session recap (Claude): NPCs, locations, what happened, combat with kill count | **Write recap** button (or automatic), or `npm run summarize` | Ready |
 | Edit, add to and copy the recap | The session's **Recap** tab | Ready |
 | Upload the recap to your wiki (any endpoint that takes a POST/PUT) | The recap's **Upload to wiki** button; set up under Settings → Upload | Ready |
@@ -156,9 +156,9 @@ recording:
   ignore_users:
     - "234395307759108106"     # your music bot's user ID: never recorded
 
-speakers:                      # names used in transcripts (defaults to Discord display names)
-  "123456789012345678": Rees
-  "223456789012345678": Sam
+speakers:                      # who talks, and on which Discord accounts (else Discord display names)
+  rees: { name: Rees, discord: ["123456789012345678"], description: DM }
+  sam: { name: Sam, discord: ["223456789012345678"] }
 
 transcription:
   language: en                 # set it if everyone speaks one language
@@ -167,12 +167,13 @@ transcription:
 transcript:
   timezone: America/New_York
 
-campaigns:                     # by voice channel ID: who plays which character
-  "345678901234567890":
+campaigns:
+  strahd:
     name: Curse of Strahd
-    characters:
-      "123456789012345678": DM
-      "223456789012345678": "Thorin — dwarf fighter"
+    channels: ["345678901234567890"]   # optional: recordings here default to this campaign
+
+characters:                    # who plays whom
+  thorin: { name: Thorin, description: dwarf fighter, campaign: strahd, speaker: sam }
 
 summary:
   context: |
@@ -307,20 +308,30 @@ How it's made, step by step (each step is saved, so re-runs only redo what chang
 Each step can be turned off under **Settings → Recap**. Claude steps cost another pass over the
 transcript each (see [Costs](#costs)).
 
-**Campaigns:** set each voice channel's roster once in **Settings → Campaigns**: every person's
-real name, their character (and a short description like "dwarf fighter 5"), their D&D Beyond
-sheet, plus any guests who talk but don't play. It's saved in the app, so you never set it up
-again. Transcripts then show character names (`[01:12:04] Thorin: I kick the door in.`; the
+**Speakers, campaigns and characters** are set up once, separately, in Settings:
+
+- **Speakers**: the people who talk, named as transcripts should show them, each linked to the
+  Discord accounts they talk on. Accounts seen in past recordings or in a voice channel right now
+  are listed; you can also paste an ID. Someone who sometimes plays from another person's mic gets
+  that account linked too (see [shared mics](#e-shared-mics-two-people-on-one-account)).
+- **Campaigns**: name, background for Claude, the D&D Beyond campaign, and optionally the voice
+  channels you usually play in (recordings there default to it).
+- **Characters**: by campaign, each played by a speaker. Add one by name, or paste a public
+  D&D Beyond character link: it fills in the description ("Hill Dwarf Fighter 5") and offers the
+  rest of that D&D Beyond campaign's characters to add with a click.
+
+Pick the campaign when you start recording (the **Campaign** menu on Record, or
+`/record campaign:`), or change it afterwards on the session's page. Transcripts then show character names (`[01:12:04] Thorin: I kick the door in.`; the
 speaker filter shows "Thorin (Sam)"), and the recap knows party members aren't NPCs and credits
-kills to characters. After changing the roster, press **Rebuild transcript** on older sessions
+kills to characters. After changing any of this, press **Rebuild transcript** on older sessions
 (no API calls). A Craig import uses the campaign if there's only one.
 
-**New at the table:** if someone talks in a campaign session but isn't on its roster, the clean-up
+**New at the table:** if someone talks on a Discord account no speaker is linked to, the clean-up
 step guesses whether they're a new player (and which character, if anyone says it) or a guest.
-The session page then asks once, under **New at the table**: **Pair** (as the guessed character,
-editable), **Guest**, or **Ignore**. Pairing adds them to the roster and rebuilds the transcript
-with their character name. Until you decide, the recap treats a likely new player as part of the
-party, and a guest's lines as table talk.
+The session page then asks once, under **New at the table**: **Add speaker** (with their
+character, if they play one), link the account to a speaker you already have (someone on a new
+mic), or **Ignore**. Your choice is saved and the transcript is rebuilt. Until you decide, the
+recap treats a likely new player as part of the party, and a guest's lines as table talk.
 
 **Editing:** on the session's **Recap** tab you can **Copy** the Markdown, add a note to any
 section, or **Edit** the whole thing (with a preview). The first edit keeps the generated version
@@ -330,39 +341,36 @@ in `summary/generated.md`. Writing a new recap asks first, and moves your edited
 **Changing the format:** the sections come from the prompts. Edit them under **Settings → Prompts**
 (or copy `prompts/*.md` into `summary.prompts_dir`).
 
-### E. Shared accounts (two people on one mic)
+### E. Shared mics (two people on one account)
 
-The bot records one track per Discord **account**. If two people share an account (or one person
-plays several roles, like a DM who narrates and voices NPCs), their lines all come out under one
-name. You can't split them apart from the audio, but Claude can usually tell from context who's
-speaking. List the identities in `config.yaml`:
+The bot records one track per Discord **account**. If two people share an account (or one
+sometimes plays from another's mic), their lines all come out under one name. You can't split them
+apart from the audio, but Claude can usually tell from context who's speaking. Link the account to
+each speaker who talks on it (Settings → Speakers, or `config.yaml`):
 
 ```yaml
 speakers:
-  "123456789012345678":
-    name: Rees
-    disambiguate:
-      - "DM — narrates the world and voices NPCs"
-      - "Hamqueef — a player character"
+  rees: { name: Rees, discord: ["123456789012345678"], description: DM, narrates and voices NPCs }
+  sam: { name: Sam, discord: ["223456789012345678", "123456789012345678"] }   # sometimes on Rees's mic
 ```
 
-The text before ` — ` is the name used in transcripts; the rest is a hint for Claude.
-`npm run summarize` then runs an extra pass before the recap:
+The description is a hint for Claude. In a campaign session, a speaker who plays a character there
+is labelled by the character. `npm run summarize` then runs an extra pass before the recap:
 
-- Each of that account's lines is labelled with one identity. Claude sees the whole conversation, not just this account.
-- `transcript.speakers.md` is written next to `transcript.md`. Lines are shown as `Hamqueef (?)`
+- Each of that account's lines is labelled with one speaker. Claude sees the whole conversation, not just this account.
+- `transcript.speakers.md` is written next to `transcript.md`. Lines are shown as `Thorin (?)`
   when Claude was guessing, and as `Rees (unclear)` when it couldn't tell.
 - The recap is built from the relabelled transcript. `transcript.md` itself stays exactly as recorded.
 
 To check the labels without writing a recap, run `npm run disambiguate -- <session>`. Short replies
-like "Yeah" are often guesses; that's expected and rarely matters for the recap. Accounts
-without `disambiguate` are unaffected. Their lines are joined into turns as usual, while a shared
-account's lines are kept separate so each one can be labelled.
+like "Yeah" are often guesses; that's expected and rarely matters for the recap. Accounts with one
+speaker are unaffected. Their lines are joined into turns as usual, while a shared mic's lines are
+kept separate so each one can be labelled.
 
 ### F. The web app
 
 A small web app to browse sessions, read and edit recaps, run each step, and change every
-setting (ignore list, speaker names, shared accounts, campaigns, recap steps, prompts). It runs on the Mac
+setting (speakers, campaigns, characters, ignore list, recap steps, prompts). It runs on the Mac
 and works in any browser, including your phone.
 
 **On the Mac:**
@@ -388,8 +396,8 @@ What's in it:
   - its **Recap** (copy, add a note, edit), **Speakers labelled** and **Transcript** (searchable, filter by speaker, download);
   - buttons for **Transcribe**, **Rebuild transcript**, **Label speakers** and **Write recap**, with a live log.
 - **Settings**:
-  - **Recording & people**: pick people to ignore or name from anyone seen in past recordings, and turn on *Shared account* for a Discord account several people use.
-  - **Campaigns**: per voice channel, the campaign's name, background and who plays which character.
+  - **Speakers**, **Campaigns** and **Characters**: who talks on which Discord accounts, the campaigns you run, and who plays whom (with D&D Beyond).
+  - **Recording**: accounts never to record, and what happens when a recording stops.
   - **Recap**: extra sections, detail level, and the clean-up and audit steps.
   - **Upload**: where recaps are sent. Pick **Ardent Weave wiki** for The Ardent Weave
     (ReesMcD/dnd-wiki): the address is `https://<your wiki>.vercel.app/api/sessions`, the key is the
@@ -483,7 +491,7 @@ site: build with `VITE_API_URL=https://<your API address>` and list the Vercel U
 ```
 data/sessions/<session-id>/
   transcript.md             ← the transcript
-  transcript.speakers.md    ← relabelled transcript (only with shared accounts)
+  transcript.speakers.md    ← relabelled transcript (only with shared mics)
   summary.md                ← the session recap (edit it in the app)
   transcript.clean.md       ← the transcript after Claude's clean-up
   session.json              when/where it was recorded
@@ -509,8 +517,9 @@ data/sessions/<session-id>/
 | `recording.ignore_bots` | `true` | Skip every bot account |
 | `recording.silence_ms` | `1000` | Silence that ends an utterance (also used to split Craig tracks) |
 | `recording.audio_retention_days` | `30` | Delete a session's audio this many days after it stopped, once it's transcribed (`0` = keep forever). Checked when the app starts and daily; transcripts and recaps are kept |
-| `speakers` | `{}` | `userId: Name` for transcripts (otherwise the Discord display name), or `userId: {name, disambiguate: [...]}` for a [shared account](#e-shared-accounts-two-people-on-one-mic) |
-| `campaigns` | `{}` | `voiceChannelId: {name, context, dndbeyond, characters: {userId: {name, description, dndbeyond}}, guests: [userId]}`; a character can also be a `"Name — description"` string. See [the recap](#d-write-the-session-recap) |
+| `speakers` | `{}` | `id: {name, discord: [userId…], description}`: who talks, on which accounts. An account under two speakers is a [shared mic](#e-shared-mics-two-people-on-one-account) |
+| `campaigns` | `{}` | `id: {name, context, dndbeyond, channels: [voiceChannelId…]}`. See [the recap](#d-write-the-session-recap) |
+| `characters` | `{}` | `id: {name, description, dndbeyond, campaign, speaker}`: who plays whom, in which campaign |
 | `transcription.provider` | `groq` | `groq` or `openai` |
 | `transcription.model` | per provider | Groq: `whisper-large-v3-turbo`; OpenAI: `whisper-1` |
 | `transcription.base_url` | per provider | Any OpenAI-compatible transcription server |

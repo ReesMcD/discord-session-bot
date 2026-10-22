@@ -1,32 +1,50 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { SessionDetail, UnpairedSpeaker } from '../types';
+import type { ConfigState, SessionDetail, UnpairedSpeaker } from '../types';
 
-/** People who spoke without being on the campaign's roster: pair them, mark them guests, or ignore. */
+/** Discord accounts heard in this session that no speaker is linked to: add a speaker, link one you have, or ignore. */
 export function UnpairedCard({ s, onSaved }: { s: SessionDetail; onSaved: (d: SessionDetail) => void }) {
+  const [speakers, setSpeakers] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    if (!s.unpaired.length) return;
+    api<ConfigState>('/config').then((c) => setSpeakers(Object.entries(c.config?.speakers ?? {}).map(([id, sp]) => ({ id, name: sp.name }))), () => {});
+  }, [s.unpaired.length]);
   if (!s.unpaired.length) return null;
   return (
     <div className="card notice">
       <strong>New at the table</strong>
       <p className="muted small" style={{ margin: '4px 0 8px' }}>
-        Not on this campaign's roster yet. Your choice is saved to the campaign, so you won't be asked again.
+        Nobody is linked to these Discord accounts yet. Your choice is saved under Settings → Speakers, so you won't be asked again.
       </p>
       {s.unpaired.map((u) => (
-        <UnpairedRow key={u.userId} sessionId={s.id} person={u} onSaved={onSaved} />
+        <UnpairedRow key={u.userId} sessionId={s.id} account={u} speakers={speakers} hasCampaign={!!s.campaign} onSaved={onSaved} />
       ))}
     </div>
   );
 }
 
-function UnpairedRow({ sessionId, person, onSaved }: { sessionId: string; person: UnpairedSpeaker; onSaved: (d: SessionDetail) => void }) {
-  const [character, setCharacter] = useState(person.character ?? '');
+function UnpairedRow({
+  sessionId,
+  account,
+  speakers,
+  hasCampaign,
+  onSaved,
+}: {
+  sessionId: string;
+  account: UnpairedSpeaker;
+  speakers: Array<{ id: string; name: string }>;
+  hasCampaign: boolean;
+  onSaved: (d: SessionDetail) => void;
+}) {
+  const [name, setName] = useState(account.name);
+  const [character, setCharacter] = useState(account.role === 'guest' ? '' : (account.character ?? ''));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const decide = async (body: object) => {
     setBusy(true);
     setError('');
     try {
-      onSaved(await api<SessionDetail>(`/sessions/${encodeURIComponent(sessionId)}/unpaired/${person.userId}`, { method: 'POST', json: body }));
+      onSaved(await api<SessionDetail>(`/sessions/${encodeURIComponent(sessionId)}/unpaired/${account.userId}`, { method: 'POST', json: body }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -34,25 +52,37 @@ function UnpairedRow({ sessionId, person, onSaved }: { sessionId: string; person
     }
   };
   const guess =
-    person.role === 'new_player'
-      ? `Probably a new player${person.character ? ` as ${person.character}` : ''}`
-      : person.role === 'guest'
+    account.role === 'new_player'
+      ? `Probably a new player${account.character ? ` as ${account.character}` : ''}`
+      : account.role === 'guest'
         ? 'Probably a guest (not playing)'
-        : 'Not on the roster';
+        : 'Not linked to a speaker';
   return (
     <div className="unpaired-row">
       <div className="small">
-        <strong>{person.name}</strong> · {guess}
-        {person.time && <span className="muted"> [{person.time}]</span>}
+        <strong>{account.name}</strong> · {guess}
+        {account.time && <span className="muted"> [{account.time}]</span>}
       </div>
       <div className="row">
-        <input value={character} placeholder="Character name" onChange={(e) => setCharacter(e.target.value)} style={{ flex: '1 1 140px', minWidth: 0 }} />
-        <button className={person.role === 'guest' ? '' : 'primary'} disabled={busy || !character.trim()} onClick={() => decide({ action: 'pair', character })}>
-          Pair
+        <input value={name} aria-label="Speaker name" placeholder="Their name" onChange={(e) => setName(e.target.value)} style={{ flex: '1 1 120px', minWidth: 0 }} />
+        {hasCampaign && (
+          <input value={character} aria-label="Character" placeholder="Character (optional)" onChange={(e) => setCharacter(e.target.value)} style={{ flex: '1 1 120px', minWidth: 0 }} />
+        )}
+        <button className="primary" disabled={busy || !name.trim()} onClick={() => decide({ action: 'new', name, ...(character.trim() ? { character } : {}) })}>
+          Add speaker
         </button>
-        <button className={person.role === 'guest' ? 'primary' : ''} disabled={busy} onClick={() => decide({ action: 'guest' })}>
-          Guest
-        </button>
+      </div>
+      <div className="row">
+        {speakers.length > 0 && (
+          <select value="" disabled={busy} aria-label="Link to a speaker you have" onChange={(e) => e.target.value && decide({ action: 'link', speaker: e.target.value })} style={{ flex: '1 1 160px' }}>
+            <option value="">…or it's someone you have (on another mic)</option>
+            {speakers.map((sp) => (
+              <option key={sp.id} value={sp.id}>
+                {sp.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button className="link" disabled={busy} onClick={() => decide({ action: 'ignore' })}>
           Ignore
         </button>

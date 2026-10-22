@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { parseConfig } from '../src/config/load.js';
-import { parseIdentity, sharedAccounts, speakerNames } from '../src/config/schema.js';
+import { sharedAccounts, speakerNames } from '../src/config/roster.js';
 import { paths, writeJson } from '../src/session/layout.js';
 import { disambiguateLines, disambiguateSession } from '../src/summary/disambiguate.js';
 import { AnthropicSummaryModel, type Labels } from '../src/summary/model.js';
@@ -56,18 +56,17 @@ function labeller(labels: Labels['labels']): FakeModel {
   return new FakeModel({ disambiguate: () => ({ labels }) });
 }
 
-test('config: shared speakers accept identities; plain names still work; labels come from the hint', () => {
+test('config: a Discord account linked to several speakers is a shared mic (older shared accounts read the same way)', () => {
   const { config } = parseConfig(CONFIG);
-  assert.deepEqual(speakerNames(config), { [REES]: 'Rees', [SAM]: 'Sam' });
+  assert.deepEqual(speakerNames(config), { [SAM]: 'Sam' });
   assert.deepEqual(
-    sharedAccounts(config).get(REES)?.map((i) => i.label),
-    ['DM', 'Hamqueef'],
+    sharedAccounts(config).get(REES)?.map((i) => [i.label, i.description]),
+    [
+      ['DM', 'DM — narrates the world and NPCs'],
+      ['Hamqueef', 'Hamqueef — a player character'],
+    ],
   );
   assert.equal(sharedAccounts(config).has(SAM), false);
-  assert.deepEqual(parseIdentity('Thorin: the dwarf'), { label: 'Thorin', description: 'Thorin: the dwarf' });
-  assert.deepEqual(parseIdentity('Narrator'), { label: 'Narrator', description: 'Narrator' });
-  assert.equal(parseIdentity('Jean-Luc - the captain').label, 'Jean-Luc');
-  assert.throws(() => parseConfig(`speakers:\n  "${REES}":\n    disambiguate: ["only one"]`), /at least two/);
 });
 
 test('merge keeps shared-account lines separate so each can be relabelled', () => {

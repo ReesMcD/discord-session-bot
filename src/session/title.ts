@@ -1,4 +1,4 @@
-import { campaignFor } from '../config/campaign.js';
+import { campaignFor } from '../config/roster.js';
 import type { Config } from '../config/schema.js';
 import type { SessionInfo } from '../shared/types.js';
 
@@ -6,7 +6,7 @@ import type { SessionInfo } from '../shared/types.js';
  * A session's name: the one given by hand, else sessions.title filled in. {campaign} falls back to
  * #channel, then "Session", so a recording with no campaign still reads well.
  */
-export function sessionTitle(info: SessionInfo, config: Pick<Config, 'campaigns' | 'sessions' | 'transcript'>): string {
+export function sessionTitle(info: SessionInfo, config: Pick<Config, 'speakers' | 'campaigns' | 'characters' | 'sessions' | 'transcript'>): string {
   if (info.title?.trim()) return info.title.trim();
   const tz = config.transcript.timezone ? { timeZone: config.transcript.timezone } : {};
   const channel = info.channelName ? `#${info.channelName}` : '';

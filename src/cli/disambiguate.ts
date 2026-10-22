@@ -6,14 +6,14 @@
  * summarizing. `npm run summarize` runs this pass automatically.
  */
 import Anthropic from '@anthropic-ai/sdk';
-import { sharedAccounts } from '../config/schema.js';
+import { sharedAccounts } from '../config/roster.js';
 import { setup, resolveSessionDir, die } from './common.js';
 import { AnthropicSummaryModel, SummaryError } from '../summary/model.js';
 import { disambiguateSession } from '../summary/disambiguate.js';
 
 const { config } = setup();
 const sessionDir = resolveSessionDir(process.argv[2], 'Usage: npm run disambiguate -- <sessionDir|sessionId> [--force]');
-if (sharedAccounts(config).size === 0) die('No shared accounts configured: add `disambiguate:` to a speaker in config.yaml (see README → Shared accounts)');
+if (sharedAccounts(config).size === 0) die('No shared mics: list the same Discord account under two or more speakers in config.yaml (see README → Shared mics)');
 if (!process.env.ANTHROPIC_API_KEY) die('ANTHROPIC_API_KEY is not set (add it to .env)');
 
 try {

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { campaignFor } from '../config/campaign.js';
+import { campaignFor } from '../config/roster.js';
 import type { Config } from '../config/schema.js';
 import { paths, readJson, readSessionInfo } from '../session/layout.js';
 import type { TranscriptLine } from '../shared/types.js';
@@ -70,7 +70,7 @@ export function toWikiSession(sessionDir: string, config: Config, recap: { id: s
   const info = readSessionInfo(sessionDir);
   const campaign = campaignFor(config, info)?.name;
   if (!campaign) {
-    throw new Error("This session's voice channel has no campaign name. Set it under Settings → Campaigns, spelled as the wiki's campaign is.");
+    throw new Error("This session has no campaign. Pick one on the session's page (or make it the default for its voice channel under Settings → Campaigns), named as the wiki's campaign is.");
   }
   const lines = readJson<{ lines: TranscriptLine[] }>(paths.segments(sessionDir))?.lines ?? [];
   const players = [...new Set(lines.map((l) => l.speaker))];

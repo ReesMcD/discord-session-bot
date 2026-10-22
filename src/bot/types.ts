@@ -9,7 +9,8 @@ export type { BotStatus, GuildInfo, RecordingStatus, VoiceChannelInfo } from '..
 export interface BotControl {
   status(): BotStatus;
   guilds(): GuildInfo[];
-  join(channelId: string): Promise<RecordingStatus>;
+  /** Starts recording; `campaign` (an ID) overrides the channel's default campaign. */
+  join(channelId: string, opts?: { campaign?: string }): Promise<RecordingStatus>;
   stop(): Promise<{ sessionId: string }>;
   on(event: 'status', listener: (s: BotStatus) => void): unknown;
   off(event: 'status', listener: (s: BotStatus) => void): unknown;

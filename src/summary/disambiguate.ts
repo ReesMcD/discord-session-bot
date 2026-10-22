@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sharedAccounts, type Config, type Identity } from '../config/schema.js';
+import { campaignFor, sharedAccounts, type SharedIdentity } from '../config/roster.js';
+import type { Config } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, joinLines, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
 import { chunkTranscript, formatLine, type Chunk } from './chunk.js';
@@ -10,7 +11,7 @@ import type { Labels, SummaryModel, Usage } from './model.js';
 import { loadTemplate, render } from './prompts.js';
 
 /** A shared account's identities, numbered globally so one answer can't pick another account's. */
-interface NumberedIdentity extends Identity {
+interface NumberedIdentity extends SharedIdentity {
   number: number;
   userId: string;
 }
@@ -49,7 +50,7 @@ function formatSection(chunk: Chunk, total: number, ids: ReadonlyMap<TranscriptL
 /**
  * Optional pass for Discord accounts shared by several people (or one person in several roles):
  * Claude reads the conversation and labels each of that account's lines with one of the identities
- * listed under `speakers.<id>.disambiguate`. Other speakers pass through unchanged.
+ * linked to it (the speakers whose `discord` lists it). Other speakers pass through unchanged.
  * Expects un-joined lines for shared accounts (mergeSession keeps them separate).
  */
 export async function disambiguateLines(
@@ -61,7 +62,7 @@ export async function disambiguateLines(
   opts: DisambiguateOptions,
 ): Promise<DisambiguationResult> {
   const log = opts.log ?? console.log;
-  const shared = sharedAccounts(config);
+  const shared = sharedAccounts(config, campaignFor(config, session));
   const present = new Set(lines.map((l) => l.userId));
   const accounts = new Map<string, NumberedIdentity[]>();
   const byNumber = new Map<number, NumberedIdentity>();
@@ -127,7 +128,7 @@ export async function disambiguateLines(
     }
     if (label.confident) stats.confident++;
     else stats.guessed++;
-    return { ...line, speaker: identity.label, inferred: { account: line.speaker, confidence: label.confident ? 'high' : 'low' } };
+    return { ...line, speaker: identity.label, ...(identity.player ? { player: identity.player } : {}), inferred: { account: line.speaker, confidence: label.confident ? 'high' : 'low' } };
   });
 
   return {

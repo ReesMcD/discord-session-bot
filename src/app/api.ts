@@ -5,7 +5,7 @@ import { requirePassword, SignInLimiter, type PasswordSource } from './auth.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner, type Job, type JobStep } from './jobs.js';
 import { DEFAULT_PROMPTS_DIR, PROMPT_NAMES, checkTemplate, deletePrompt, readPrompts, writePrompt } from './promptStore.js';
-import { SESSION_FILES, knownPeople, listSessions, sessionDetail, sessionDirFor, trashSession, updateSession } from './sessions.js';
+import { SESSION_FILES, knownAccounts, listSessions, sessionDetail, sessionDirFor, trashSession, updateSession } from './sessions.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { paths } from '../session/layout.js';
 import type { PromptName } from '../summary/prompts.js';
@@ -16,11 +16,12 @@ import type { MusicControl, MusicStatus } from '../music/control.js';
 import { musicRoutes } from './musicRoutes.js';
 import { MusicLibrary } from '../music/library.js';
 import { UPLOAD_TOKEN_ENV, testUpload } from '../upload/recapUpload.js';
-import { configSchema } from '../config/schema.js';
+import { configObject, configSchema } from '../config/schema.js';
 import { encounterRoutes } from './encounterRoutes.js';
 import { EncounterStore } from '../encounter/store.js';
 import { WikiEncounters } from '../encounter/wiki.js';
-import type { EncounterState } from '../shared/types.js';
+import type { DndBeyondCharacter, EncounterState } from '../shared/types.js';
+import { DndBeyondError, lookupCharacter } from '../dndbeyond/characters.js';
 
 export interface ApiOptions {
   password: PasswordSource;
@@ -131,14 +132,13 @@ export function createApi(opts: ApiOptions): Hono {
     return c.json({ ...sessionDetail(opts.dataDir, id, opts.configStore.read().config)!, jobs: opts.jobs.list(id) });
   });
 
-  /** Pair someone who isn't on the roster yet, mark them a guest, or ignore them for this session. */
+  /** A Discord account no speaker is linked to: link it to a speaker, add a new speaker, or ignore it here. */
   api.post('/sessions/:id/unpaired/:userId', async (c) => {
     const id = c.req.param('id');
     const dir = sessionDirFor(opts.dataDir, id);
     if (!dir) return c.json({ error: 'not found' }, 404);
-    const body = (await c.req.json().catch(() => ({}))) as Partial<UnpairedAction> & { character?: unknown };
-    if (body.action !== 'pair' && body.action !== 'guest' && body.action !== 'ignore') return c.json({ error: 'action must be pair, guest or ignore' }, 400);
-    const decision = (body.action === 'pair' ? { action: 'pair', character: typeof body.character === 'string' ? body.character : '' } : { action: body.action }) as UnpairedAction;
+    const decision = readUnpairedAction(await c.req.json().catch(() => ({})));
+    if (!decision) return c.json({ error: 'action must be link (with speaker), new (with name, and optionally character) or ignore' }, 400);
     const state = opts.configStore.read();
     if (!state.config) return c.json({ error: `Fix config.yaml first: ${state.error}` }, 400);
     try {
@@ -146,8 +146,8 @@ export function createApi(opts: ApiOptions): Hono {
       if (next) {
         const saved = opts.configStore.write(next);
         if (saved.errors.length) return c.json({ error: saved.errors[0]!.message }, 400);
-        // Names in the transcript follow the roster.
-        if (decision.action === 'pair') opts.jobs.enqueue(id, 'merge');
+        // Names in the transcript follow the speakers.
+        opts.jobs.enqueue(id, 'merge');
       }
     } catch (err) {
       return c.json({ error: (err as Error).message }, 400);
@@ -155,7 +155,23 @@ export function createApi(opts: ApiOptions): Hono {
     return c.json({ ...sessionDetail(opts.dataDir, id, opts.configStore.read().config)!, jobs: opts.jobs.list(id) });
   });
 
-  api.get('/people', (c) => c.json(knownPeople(opts.dataDir)));
+  /** A public D&D Beyond character (and its campaign's other characters), to add characters from. */
+  const characterCache = new Map<number, { at: number; value: DndBeyondCharacter }>();
+  api.get('/dndbeyond/characters/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isSafeInteger(id) || id <= 0) return c.json({ error: 'Not a D&D Beyond character ID' }, 400);
+    const cached = characterCache.get(id);
+    if (cached && Date.now() - cached.at < 10 * 60_000) return c.json(cached.value);
+    try {
+      const value = await lookupCharacter(id, opts.httpFetch ?? fetch);
+      characterCache.set(id, { at: Date.now(), value });
+      return c.json(value);
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, err instanceof DndBeyondError ? 502 : 500);
+    }
+  });
+
+  api.get('/discord/accounts', (c) => c.json(knownAccounts(opts.dataDir, opts.bot?.guilds() ?? [])));
 
   api.post('/sessions/:id/jobs', async (c) => {
     const id = c.req.param('id');
@@ -204,10 +220,10 @@ export function createApi(opts: ApiOptions): Hono {
   api.get('/bot/guilds', (c) => c.json(opts.bot?.guilds() ?? []));
   api.post('/bot/join', async (c) => {
     if (!opts.bot) return c.json({ error: 'The Discord bot is not running (no DISCORD_TOKEN)' }, 409);
-    const { channelId } = (await c.req.json().catch(() => ({}))) as { channelId?: string };
+    const { channelId, campaign } = (await c.req.json().catch(() => ({}))) as { channelId?: string; campaign?: unknown };
     if (!channelId || !/^\d{15,22}$/.test(channelId)) return c.json({ error: 'channelId is required' }, 400);
     try {
-      return c.json(await opts.bot.join(channelId));
+      return c.json(await opts.bot.join(channelId, typeof campaign === 'string' && campaign ? { campaign } : {}));
     } catch (err) {
       return c.json({ error: (err as Error).message }, 409);
     }
@@ -240,7 +256,7 @@ export function createApi(opts: ApiOptions): Hono {
   /** Sends a test request with the upload settings given (unsaved edits included). */
   api.post('/upload/test', async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { upload?: unknown; campaign?: unknown };
-    const parsed = configSchema.shape.upload.safeParse(body.upload ?? {});
+    const parsed = configObject.shape.upload.safeParse(body.upload ?? {});
     if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? 'invalid upload settings' }, 400);
     if (!parsed.data.url) return c.json({ error: 'Set the address first' }, 400);
     return c.json(await testUpload(parsed.data, process.env[UPLOAD_TOKEN_ENV], opts.uploadFetch, typeof body.campaign === 'string' ? body.campaign : undefined));
@@ -289,4 +305,13 @@ export function createApi(opts: ApiOptions): Hono {
   });
 
   return api;
+}
+
+function readUnpairedAction(body: unknown): UnpairedAction | undefined {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  if (b.action === 'ignore') return { action: 'ignore' };
+  if (b.action === 'link' && text(b.speaker)) return { action: 'link', speaker: text(b.speaker)! };
+  if (b.action === 'new' && text(b.name)) return { action: 'new', name: text(b.name)!, ...(text(b.character) ? { character: text(b.character)! } : {}) };
+  return undefined;
 }

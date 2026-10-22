@@ -161,7 +161,7 @@ export function UploadSection({ config, update, err }: SectionProps) {
           checked={u.auto}
           onChange={(v) => set('auto', v)}
           label="Upload automatically after a recording"
-          hint='Once its recap is written (needs "After a recording: Transcribe + recap" under Recording & people). Off: you review and edit first.'
+          hint='Once its recap is written (needs "After a recording: Transcribe + recap" under Settings → Recording). Off: you review and edit first.'
         />
         {wikiMode && campaignNames.length === 0 && (
           <p className="small bad-text">Name your campaign under Campaigns first, spelled as the wiki's campaign is.</p>

@@ -1,7 +1,7 @@
 import { readdirSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { campaignFor } from '../config/campaign.js';
-import { sharedAccounts, speakerNames, type Config } from '../config/schema.js';
+import { campaignFor, charactersByAccount, sharedAccounts, speakerNames } from '../config/roster.js';
+import type { Config } from '../config/schema.js';
 import { paths, readJson, readParticipants, readSessionInfo, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { SpeakerTranscript } from '../transcription/transcribeSession.js';
 import type { SpeakerSegment } from '../transcription/remap.js';
@@ -144,7 +144,7 @@ export function mergeSession(sessionDir: string, config: Config): MergeResult {
     sessionStartMs: session.startedAt,
     aliases: speakerNames(config),
     participants: readParticipants(sessionDir),
-    ...(campaign ? { characters: Object.fromEntries(campaign.characters.map((c) => [c.userId, c.label])) } : {}),
+    ...(campaign ? { characters: charactersByAccount(config, campaign) } : {}),
     mergeGapMs: config.transcript.merge_gap_seconds * 1000,
     maxLineMs: config.transcript.max_line_seconds * 1000,
     noJoin: new Set(sharedAccounts(config).keys()),

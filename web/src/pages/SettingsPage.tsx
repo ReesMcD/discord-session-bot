@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api';
 import { href } from '../router';
-import type { Config, ConfigState, FieldError, Person } from '../types';
-import { PeopleSection } from './settings/PeopleSection';
+import type { Config, ConfigState, DiscordAccount, FieldError } from '../types';
+import { RecordingSection } from './settings/RecordingSection';
+import { SpeakersSection } from './settings/SpeakersSection';
 import { CampaignsSection } from './settings/CampaignsSection';
+import { CharactersSection } from './settings/CharactersSection';
 import { TranscriptionSection } from './settings/TranscriptionSection';
 import { RecapSection } from './settings/RecapSection';
 import { PromptsSection } from './settings/PromptsSection';
@@ -12,11 +14,13 @@ import { KeysSection } from './settings/KeysSection';
 import { UploadSection } from './settings/UploadSection';
 import { PlayersSection } from './settings/PlayersSection';
 
-type Section = 'keys' | 'people' | 'campaigns' | 'transcription' | 'summary' | 'upload' | 'players' | 'prompts' | 'yaml';
+type Section = 'keys' | 'recording' | 'speakers' | 'campaigns' | 'characters' | 'transcription' | 'summary' | 'upload' | 'players' | 'prompts' | 'yaml';
 const SECTIONS: { key: Section; label: string }[] = [
   ...(window.sessionBot ? [{ key: 'keys' as Section, label: 'Keys & phone' }] : []),
-  { key: 'people', label: 'Recording & people' },
+  { key: 'speakers', label: 'Speakers' },
   { key: 'campaigns', label: 'Campaigns' },
+  { key: 'characters', label: 'Characters' },
+  { key: 'recording', label: 'Recording' },
   { key: 'summary', label: 'Recap' },
   { key: 'upload', label: 'Upload' },
   { key: 'players', label: 'Players' },
@@ -29,8 +33,8 @@ const SECTIONS: { key: Section; label: string }[] = [
 export function SettingsPage({ initial }: { initial?: string | undefined }) {
   const [state, setState] = useState<ConfigState | null>(null);
   const [draft, setDraft] = useState<Config | null>(null);
-  const [people, setPeople] = useState<Person[]>([]);
-  const [section, setSection] = useState<Section>(SECTIONS.some((s) => s.key === initial) ? (initial as Section) : 'people');
+  const [accounts, setAccounts] = useState<DiscordAccount[]>([]);
+  const [section, setSection] = useState<Section>(SECTIONS.some((s) => s.key === initial) ? (initial as Section) : 'speakers');
   // The URL picks the tab (the sidebar links straight to Campaigns), and a tab click updates the URL.
   useEffect(() => {
     if (SECTIONS.some((s) => s.key === initial)) setSection(initial as Section);
@@ -51,7 +55,7 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
     });
   useEffect(() => {
     void load();
-    api<Person[]>('/people').then(setPeople, () => {});
+    api<DiscordAccount[]>('/discord/accounts').then(setAccounts, () => {});
   }, []);
 
   const dirty = useMemo(() => !!draft && !!state?.config && JSON.stringify(draft) !== JSON.stringify(state.config), [draft, state]);
@@ -95,8 +99,10 @@ export function SettingsPage({ initial }: { initial?: string | undefined }) {
       {state.error && section !== 'yaml' && <div className="error-box">{state.error}</div>}
 
       {section === 'keys' && <KeysSection />}
-      {draft && section === 'people' && <PeopleSection config={draft} update={update} people={people} err={err} />}
-      {draft && section === 'campaigns' && <CampaignsSection config={draft} update={update} people={people} err={err} />}
+      {draft && section === 'speakers' && <SpeakersSection config={draft} update={update} accounts={accounts} err={err} />}
+      {draft && section === 'campaigns' && <CampaignsSection config={draft} update={update} err={err} />}
+      {draft && section === 'characters' && <CharactersSection config={draft} update={update} err={err} />}
+      {draft && section === 'recording' && <RecordingSection config={draft} update={update} accounts={accounts} err={err} />}
       {draft && section === 'transcription' && <TranscriptionSection config={draft} update={update} err={err} />}
       {draft && section === 'summary' && <RecapSection config={draft} update={update} err={err} />}
       {draft && section === 'upload' && <UploadSection config={draft} update={update} err={err} />}

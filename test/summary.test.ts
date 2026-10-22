@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { parseConfig } from '../src/config/load.js';
 import { PLACEHOLDERS, PROMPT_NAMES } from '../src/app/promptStore.js';
 import { paths, readJson, writeJson } from '../src/session/layout.js';
-import { campaignFor, parseCharacter } from '../src/config/campaign.js';
+import { campaignFor } from '../src/config/roster.js';
 import { parseDndBeyondId } from '../web/src/dndbeyond.js';
 import { chunkTranscript, formatChunk } from '../src/summary/chunk.js';
 import { auditCleanup, similarity, type Proposal } from '../src/summary/cleanupAudit.js';
@@ -35,13 +35,18 @@ const line = (min: number, speaker: string, text: string, userId = speaker): Tra
   text,
 });
 
-const CAMPAIGN = `campaigns:
-  "${CHANNEL}":
+const SPEAKERS = `speakers:
+  sam: { name: Sam, discord: ["${SAM}"] }
+  alex: { name: Alex, discord: ["${ALEX}"] }
+`;
+const CAMPAIGN = `${SPEAKERS}campaigns:
+  strahd:
     name: Curse of Strahd
     context: The party is level 5.
-    characters:
-      "${SAM}": "Thorin — dwarf fighter"
-      "${ALEX}": "Elara — elf wizard"
+    channels: ["${CHANNEL}"]
+characters:
+  thorin: { name: Thorin, description: dwarf fighter, campaign: strahd, speaker: sam }
+  elara: { name: Elara, description: elf wizard, campaign: strahd, speaker: alex }
 `;
 
 test('render fills placeholders and rejects unknown ones', () => {
@@ -69,34 +74,31 @@ test('chunks by time window, carries a minute of context, splits very dense wind
   assert.match(formatChunk(dense[1]!, 3), /^<transcript_section number="2" of="3" from="00:02:00" to="00:02:00">\n\(context\) \[00:01:00\] A: a+\n\[00:02:00\] A: b+\n<\/transcript_section>$/);
 });
 
-test('campaign: matched by voice channel, the only campaign for sessions without one, else none', () => {
+test('campaign: the one picked, else the channel’s default, else the only campaign for sessions without a channel', () => {
   const { config } = parseConfig(CAMPAIGN);
   const c = campaignFor(config, { channelId: CHANNEL })!;
   assert.equal(c.name, 'Curse of Strahd');
-  assert.deepEqual(c.characters.map((x) => [x.userId, x.label]), [[SAM, 'Thorin'], [ALEX, 'Elara']]);
+  assert.deepEqual(c.characters.map((x) => [x.speaker?.name, x.label]), [['Sam', 'Thorin'], ['Alex', 'Elara']]);
   assert.equal(campaignFor(config, {})?.name, 'Curse of Strahd', 'Craig import: the only campaign');
   assert.equal(campaignFor(config, { channelId: '999999999999999999' }), undefined);
-  const two = parseConfig(`${CAMPAIGN}  "444444444444444444":\n    name: Other\n`).config;
+  const two = parseConfig(CAMPAIGN.replace('characters:', '  other:\n    name: Other\ncharacters:')).config;
   assert.equal(campaignFor(two, {}), undefined, 'ambiguous with two campaigns');
-  assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "nope": Thorin\n`), /"nope" must be a Discord ID \(15–22 digits\)\n  → at campaigns\.111111111111111111\.characters\.nope/);
+  assert.equal(campaignFor(two, { channelId: CHANNEL, campaign: 'other' })?.name, 'Other', 'picked wins over the channel');
+  assert.equal(campaignFor(two, { campaign: CHANNEL })?.name, 'Curse of Strahd', 'sessions from before 0.5 stored the channel');
+  assert.throws(() => parseConfig(`${CAMPAIGN}  gone: { name: Gone, campaign: nope, speaker: nobody }\n`), /no campaign "nope"[\s\S]*no speaker "nobody"/);
+  assert.throws(() => parseConfig(CAMPAIGN.replace('characters:', `  other:\n    name: Other\n    channels: ["${CHANNEL}"]\ncharacters:`)), /already the default for "Curse of Strahd"/);
 });
 
-test('roster: characters in either form, a D&D Beyond ID, and guests', () => {
+test('characters: a D&D Beyond ID, and one without a player', () => {
   const { config } = parseConfig(`campaigns:
-  "${CHANNEL}":
-    dndbeyond: 4567890
-    characters:
-      "${SAM}": { name: Thorin, description: dwarf fighter 5, dndbeyond: 98765432 }
-      "${ALEX}": "Elara — elf wizard"
-    guests: ["444444444444444444"]
+  strahd: { name: Strahd, dndbeyond: 4567890 }
+characters:
+  thorin: { name: Thorin, description: dwarf fighter 5, dndbeyond: 98765432, campaign: strahd }
 `);
-  const c = campaignFor(config, { channelId: CHANNEL })!;
+  const c = campaignFor(config, { campaign: 'strahd' })!;
   assert.equal(c.dndbeyond, 4567890);
-  assert.deepEqual(c.guests, ['444444444444444444']);
-  assert.deepEqual(c.characters[0], { userId: SAM, label: 'Thorin', description: 'Thorin — dwarf fighter 5', dndbeyond: 98765432 });
-  assert.deepEqual(c.characters[1], { userId: ALEX, label: 'Elara', description: 'Elara — elf wizard' });
-  assert.deepEqual(parseCharacter(SAM, { name: 'DM' }), { userId: SAM, label: 'DM', description: 'DM' });
-  assert.throws(() => parseConfig(`campaigns:\n  "${CHANNEL}":\n    characters:\n      "${SAM}": { name: Thorin, class: fighter }\n`), /class/);
+  assert.deepEqual(c.characters, [{ id: 'thorin', label: 'Thorin', description: 'Thorin — dwarf fighter 5', dndbeyond: 98765432 }]);
+  assert.throws(() => parseConfig(`characters:\n  thorin: { name: Thorin, class: fighter }\n`), /class/);
 
   assert.equal(parseDndBeyondId('https://www.dndbeyond.com/characters/98765432'), 98765432);
   assert.equal(parseDndBeyondId('https://www.dndbeyond.com/campaigns/4567890?x=1'), 4567890);
@@ -104,17 +106,12 @@ test('roster: characters in either form, a D&D Beyond ID, and guests', () => {
   assert.equal(parseDndBeyondId('https://www.dndbeyond.com/characters/'), undefined);
 });
 
-test('the party block names players by their real name, falling back to the Discord name', () => {
-  const { config } = parseConfig(`${CAMPAIGN}speakers:\n  "${SAM}": Samantha\n`);
-  const block = contextBlock({ id: 's', startedAt: T0, channelId: CHANNEL }, [line(0, 'Thorin', 'hi', SAM), line(1, 'alex_d', 'yo', ALEX)], config);
-  assert.match(block, /- Thorin — dwarf fighter \(played by Samantha\)\n- Elara — elf wizard \(played by alex_d\)/);
-});
-
-test('the prompt context lists the party, who plays whom, and the campaign background', () => {
-  const { config } = parseConfig(`${CAMPAIGN}speakers:\n  "${ALEX}": Alex\nsummary:\n  context: Weekly game.\n`);
-  const block = contextBlock({ id: 's', startedAt: T0, channelId: CHANNEL, channelName: 'dnd' }, [line(0, 'Sam', 'hi', SAM)], config);
+test('the prompt context lists the party, who plays whom, everyone else heard, and the campaign background', () => {
+  const { config } = parseConfig(`${CAMPAIGN.replace(SPEAKERS, `${SPEAKERS}  rees: { name: Rees, discord: ["444444444444444444"], description: DM }\n`)}summary:\n  context: Weekly game.\n`);
+  const block = contextBlock({ id: 's', startedAt: T0, channelId: CHANNEL, channelName: 'dnd' }, [line(0, 'Thorin', 'hi', SAM), line(1, 'Rees', 'You see a wolf.', '444444444444444444')], config);
   assert.match(block, /- Campaign: Curse of Strahd/);
   assert.match(block, /## Party\n\nThe playable characters, and who plays them\. They are not NPCs\.\n\n- Thorin — dwarf fighter \(played by Sam\)\n- Elara — elf wizard \(played by Alex\)/);
+  assert.match(block, /## Also at the table\n\nSpeakers who play no character here \(the DM, guests\)\.\n\n- Rees — DM/);
   assert.match(block, /Weekly game\.\n\nThe party is level 5\./);
 });
 
@@ -315,7 +312,7 @@ test('unpaired: the clean-up asks about people off the roster, and the recap tre
   const GUEST = '666666666666666666';
   const lines = [line(0.08, 'Sam', 'We go to Barovia.', SAM), line(0.15, 'Alex', 'Garrick, roll initiative!', ALEX), line(0.2, 'Robin', 'I swing at the wolf.', NEW), line(0.3, 'Pat', 'Can I watch?', GUEST)];
   const { dir, cfg } = session(`  recap_audit: false\n`, lines);
-  cfg.campaigns[CHANNEL]!.guests.push(GUEST);
+  cfg.speakers['pat'] = { name: 'Pat', discord: [GUEST] };
   const model = new FakeModel({
     cleanup: (o) => ({ unpaired: o.system.includes('U1: Robin') ? [{ speaker: 1, role: 'new_player', character: 'Garrick', time: '00:00:12' }] : [] }),
     extract: () => notes({ combats: [{ start: '00:00:09', end: '00:00:20', opponents: ['wolf'], summary: '', deaths: ['wolf'], kills: [{ by: 'garrick', target: 'wolf' }] }] }),
@@ -324,7 +321,7 @@ test('unpaired: the clean-up asks about people off the roster, and the recap tre
   const { meta } = await summarizeSession(dir, cfg, 'h', model, { log: () => {} });
 
   assert.match(model.calls.cleanup[0]!.system, /## People not on the roster yet\n\nU1: Robin\n/);
-  assert.doesNotMatch(model.calls.cleanup[0]!.system, /U2/, 'guests and paired players are not asked about');
+  assert.doesNotMatch(model.calls.cleanup[0]!.system, /U2/, 'accounts with a speaker are not asked about');
   assert.deepEqual(readJson(summaryPaths.unpaired(dir)), [{ userId: NEW, name: 'Robin', role: 'new_player', character: 'Garrick', time: '00:00:12' }]);
   assert.match(model.calls.extract[0]!.system, /## Not on the roster yet\n\n- Robin: probably a new player, playing Garrick \(not confirmed yet\)\. Treat Garrick as part of the party, not an NPC\./);
   assert.deepEqual(meta.kills, [['Garrick', 1]], 'kills credited to the guessed character');

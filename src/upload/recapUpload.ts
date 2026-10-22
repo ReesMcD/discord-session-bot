@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
-import { campaignFor } from '../config/campaign.js';
+import { campaignFor } from '../config/roster.js';
 import { sessionTitle } from '../session/title.js';
 import type { Config } from '../config/schema.js';
 import { readJson, readSessionInfo, writeJson } from '../session/layout.js';

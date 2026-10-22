@@ -6,7 +6,8 @@ import { mergeSession } from '../transcript/merge.js';
 import { AnthropicSummaryModel, type SummaryModel } from '../summary/model.js';
 import { disambiguateSession } from '../summary/disambiguate.js';
 import { describeRun, summarizeSession } from '../summary/summarizeSession.js';
-import { sharedAccounts, type Config } from '../config/schema.js';
+import { sharedAccounts } from '../config/roster.js';
+import type { Config } from '../config/schema.js';
 import type { StepRunner } from './jobs.js';
 import { sessionDirFor } from './sessions.js';
 import { UPLOAD_TOKEN_ENV, uploadRecap } from '../upload/recapUpload.js';
@@ -50,7 +51,7 @@ export function pipelineRunner(deps: StepDeps): StepRunner {
         return;
       }
       case 'disambiguate': {
-        if (sharedAccounts(config).size === 0) throw new Error('No shared accounts configured (Settings → Speakers → "Shared account")');
+        if (sharedAccounts(config).size === 0) throw new Error('No shared mics: link a Discord account to two or more speakers (Settings → Speakers)');
         const r = await disambiguateSession(dir, config, makeModel(config), { force: job.force, log });
         if (!r.file) throw new Error('None of the configured shared accounts speak in this session');
         log(`${r.stats.labelled} lines labelled: ${r.stats.confident} confident, ${r.stats.guessed} guessed, ${r.stats.unclear} unclear`);
