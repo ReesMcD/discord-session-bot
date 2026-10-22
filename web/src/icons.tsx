@@ -40,6 +40,14 @@ export const MusicIcon = icon(
     <circle cx="17" cy="16" r="3" />
   </>,
 );
+/** Crossed swords. */
+export const EncountersIcon = icon(
+  <>
+    <path d="M4 4l10 10M4 4h4M4 4v4" />
+    <path d="M20 4L10 14M20 4h-4M20 4v4" />
+    <path d="M7 17l-3 3M17 17l3 3M6 14l4 4M18 14l-4 4" />
+  </>,
+);
 export const CampaignsIcon = icon(<path d="M4 6l8-3 8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9z" />);
 export const SettingsIcon = icon(
   <>
