@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { campaignFor } from '../config/campaign.js';
+import { sessionTitle } from '../session/title.js';
 import type { Config } from '../config/schema.js';
 import { readJson, readSessionInfo, writeJson } from '../session/layout.js';
 import type { RecapUpload, UploadTestResult } from '../shared/types.js';
@@ -51,7 +52,7 @@ export function buildPayload(sessionDir: string, config: Config): RecapPayload {
   const date = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', ...(config.transcript.timezone ? { timeZone: config.transcript.timezone } : {}) }).format(info.startedAt);
   return {
     id: info.id,
-    title: `${campaign ?? (info.channelName ? `#${info.channelName}` : 'Session')} — ${date}`,
+    title: sessionTitle(info, config),
     date,
     startedAt: new Date(info.startedAt).toISOString(),
     ...(info.stoppedAt ? { stoppedAt: new Date(info.stoppedAt).toISOString() } : {}),

@@ -171,7 +171,7 @@ function refreshTray(): void {
   if (!tray) return;
   const status = bot.status();
   const rec = status.recording;
-  recent = listSessions(dataDir).slice(0, 6);
+  recent = listSessions(dataDir, server?.configStore.read().config ?? null).slice(0, 6);
   const state = {
     bot: status,
     guilds: bot.guilds(),

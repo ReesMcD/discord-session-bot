@@ -55,6 +55,13 @@ export function CampaignsSection({ config, update, err, people }: SectionProps &
 
   return (
     <div>
+      <Field
+        label="Session names"
+        hint="How new and existing sessions are named, unless you rename one: {campaign}, {channel}, {date} and {time}. A session's campaign can be changed on its page."
+        error={err('sessions.title')}
+      >
+        <input value={config.sessions.title} onChange={(e) => update((c) => void (c.sessions.title = e.target.value))} placeholder="{campaign} — {date}" />
+      </Field>
       <p className="muted small">
         A campaign is tied to the voice channel you play in. Pair each person with their real name and character once; transcripts then show character names,
         and the recap can tell the party from NPCs. Recordings imported from Craig use the campaign when there's only one.

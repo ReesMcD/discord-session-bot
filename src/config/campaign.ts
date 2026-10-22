@@ -30,12 +30,15 @@ export function parseCharacter(userId: string, entry: CharacterEntry): Character
 }
 
 /**
- * The campaign a session belongs to: the one configured for its voice channel. Sessions without a
- * channel (Craig imports) use the only campaign when exactly one is configured.
+ * The campaign a session belongs to: the one picked for it (after the fact, in the app), else the
+ * one configured for its voice channel. Sessions without either (Craig imports) use the only
+ * campaign when exactly one is configured.
  */
-export function campaignFor(config: Pick<Config, 'campaigns'>, session: Pick<SessionInfo, 'channelId'>): Campaign | undefined {
+export function campaignFor(config: Pick<Config, 'campaigns'>, session: Pick<SessionInfo, 'channelId' | 'campaign'>): Campaign | undefined {
   const entries = Object.entries(config.campaigns);
-  const match = session.channelId ? entries.find(([id]) => id === session.channelId) : entries.length === 1 ? entries[0] : undefined;
+  const picked = session.campaign ? entries.find(([id]) => id === session.campaign) : undefined;
+  const byChannel = session.channelId ? entries.find(([id]) => id === session.channelId) : undefined;
+  const match = picked ?? byChannel ?? (!session.channelId && entries.length === 1 ? entries[0] : undefined);
   if (!match) return undefined;
   const [channelId, c] = match;
   return {

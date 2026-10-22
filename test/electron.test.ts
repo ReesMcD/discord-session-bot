@@ -20,7 +20,7 @@ const base: MenuState = {
       ],
     },
   ],
-  recent: [{ id: 's1', startedAt: Date.UTC(2026, 8, 20), channelName: 'game-night', speakers: [], utterances: 3, has: { audio: true, transcript: true, speakerLabels: false, summary: true } }],
+  recent: [{ id: 's1', title: 'Crimson Tide — Sep 20, 2026', customTitle: false, campaign: null, startedAt: Date.UTC(2026, 8, 20), channelName: 'game-night', speakers: [], utterances: 3, has: { audio: true, transcript: true, speakerLabels: false, summary: true } }],
   openAtLogin: false,
   update: null,
   now: 0,
@@ -33,7 +33,7 @@ test('idle menu: join submenu lists busiest channels first with who is there', (
   assert.deepEqual(labels(menu[0]!.submenu!), ['game-night — Rees', 'lobby']);
   assert.deepEqual(menu[0]!.submenu![0]!.action, { kind: 'join', channelId: '11' });
   assert.ok(labels(menu).includes('Recent Sessions'));
-  assert.match(menu.find((i) => i.label === 'Recent Sessions')!.submenu![0]!.label!, /^#game-night · .* ✓$/);
+  assert.match(menu.find((i) => i.label === 'Recent Sessions')!.submenu![0]!.label!, /^Crimson Tide — Sep 20, 2026 ✓$/);
   assert.deepEqual(menu.at(-1)!.action, { kind: 'quit' });
 });
 

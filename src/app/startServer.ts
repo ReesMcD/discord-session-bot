@@ -9,6 +9,7 @@ import { publicJoinUrl } from './encounterRoutes.js';
 import type { PasswordSource } from './auth.js';
 import { networkGuard } from './network.js';
 import { pruneOldAudio } from '../session/retention.js';
+import { emptyTrash } from './sessions.js';
 import { ConfigStore } from './configStore.js';
 import { JobRunner } from './jobs.js';
 import { pipelineRunner } from './steps.js';
@@ -63,6 +64,8 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
 
   // recording.audio_retention_days: on start, then daily.
   const pruneAudio = () => {
+    const emptied = emptyTrash(opts.dataDir);
+    if (emptied.length) log(`Deleted ${emptied.length} session(s) from the trash (kept 30 days)`);
     const days = configStore.read().config?.recording.audio_retention_days;
     if (days === undefined) return;
     const pruned = pruneOldAudio(opts.dataDir, days);

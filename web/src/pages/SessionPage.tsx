@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, downloadFile, subscribeJobs } from '../api';
-import { duration, hms, speakerHue, when } from '../format';
+import { hms, speakerHue, when } from '../format';
 import { href } from '../router';
 import type { Job, JobStep, SessionDetail, TranscriptLine } from '../types';
 import { Badge, Empty, Toggle } from '../ui';
 import { RecapCard } from './RecapCard';
 import { UnpairedCard } from './UnpairedCard';
+import { SessionHeader } from './SessionHeader';
 
 type Tab = 'transcript' | 'speakers' | 'summary';
 
@@ -69,12 +70,15 @@ export function SessionPage({ id }: { id: string }) {
       <a href={href('sessions')} className="small">
         ← Sessions
       </a>
-      <h1 style={{ marginTop: 6 }}>{s.channelName ? `#${s.channelName}` : s.id}</h1>
-      <div className="muted small">
-        {when(s.startedAt)}
-        {s.stoppedAt && ` · ${duration(s.stoppedAt - s.startedAt)}`}
-        {s.guildName && ` · ${s.guildName}`} · <code>{s.id}</code>
-      </div>
+      <SessionHeader
+        s={s}
+        onChange={(d) => {
+          setS(d);
+          setJobs(d.jobs);
+        }}
+        onError={setError}
+      />
+      {error && <div className="error-box">{error}</div>}
 
       <div className="card" style={{ marginTop: 14 }}>
         <div className="row">
