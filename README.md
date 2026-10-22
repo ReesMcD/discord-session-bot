@@ -10,12 +10,12 @@ speaker-labelled transcript, and turn them into a session recap with Claude. It 
 
 ## Install the Mac app (no terminal needed)
 
-The easiest way to run it is **Session Bot.app**: a menu bar app that contains the bot, the
+The easiest way to run it is **Scrying Eye.app**: a menu bar app that contains the bot, the
 transcription and recap steps, and the web app.
 
-1. **Download** the latest `Session-Bot-….dmg` from the
+1. **Download** the latest `Scrying-Eye-….dmg` from the
    [Releases page](https://github.com/ReesMcD/discord-session-bot/releases/latest). It's for
-   Apple Silicon Macs. Open it and drag **Session Bot** into **Applications**.
+   Apple Silicon Macs. Open it and drag **Scrying Eye** into **Applications**.
 2. **First launch:** the app isn't signed with an Apple Developer ID, so macOS blocks it the first
    time. Open it once, then go to **System Settings → Privacy & Security** and click
    **Open Anyway**. On older macOS, right-click the app and choose **Open** instead. You only do
@@ -27,12 +27,12 @@ transcription and recap steps, and the web app.
 4. **Use it from the menu bar** (the ◎ icon at the top of the screen):
    - **Join & Record ▸** lists your voice channels and who's in them. Pick one and it starts recording.
    - The icon turns red and shows the elapsed time. **Stop Recording** ends it, and the session is transcribed (and recapped, if you choose) automatically.
-   - **Open Session Bot** opens the app window: sessions, recaps, transcripts and settings.
+   - **Open Scrying Eye** opens the app window: sessions, recaps, transcripts and settings.
    - **Open at Login** keeps it running after restarts. The Mac won't sleep while it's recording.
 5. **On your phone:** open the app's **Settings → Keys & phone** tab for the steps. They use
    Tailscale, and your phone signs in with the password shown there.
 
-Your recordings, transcripts, recaps and settings are in `~/Library/Application Support/Session Bot/`.
+Your recordings, transcripts, recaps and settings are in `~/Library/Application Support/Session Bot/` (the app was called Session Bot before 0.4.1; updating renames the app and keeps everything).
 **Updates (0.4 and later):** when a new version is out, the menu shows **Install Update (x.y.z)…**.
 - **One click:** it downloads the update, checks it against the checksum GitHub publishes,
   installs it and restarts, in about a minute. Your data stays.
@@ -554,11 +554,11 @@ Both APIs charge by usage, so check current pricing before relying on these roug
 
 | Problem | Fix |
 |---|---|
-| Mac app: "Session Bot can't be opened" / "developer cannot be verified" | System Settings → Privacy & Security → **Open Anyway** (once per version). |
-| Mac app: "Session Bot is damaged and can't be opened" | macOS quarantine on unsigned downloads. In Terminal: `xattr -dr com.apple.quarantine "/Applications/Session Bot.app"`, then open it. |
+| Mac app: "Scrying Eye can't be opened" / "developer cannot be verified" | System Settings → Privacy & Security → **Open Anyway** (once per version). |
+| Mac app: "Scrying Eye is damaged and can't be opened" | Versions up to 0.4.0 weren't fully signed. Install 0.4.1 or later, or in Terminal run `xattr -dr com.apple.quarantine "/Applications/Scrying Eye.app"`, then open it. |
 | Mac app: "Port 4400 is already in use" | Another copy is running (or `npm run app`). Quit it. |
 | Mac app: menu says "Discord bot is off" | Add the token under Settings → Keys & phone. |
-| macOS asks whether Session Bot may accept incoming connections | Allow it if you want phone access; deny if you only use it on the Mac. |
+| macOS asks whether Scrying Eye may accept incoming connections | Allow it if you want phone access; deny if you only use it on the Mac. |
 | Not sure what's wrong | Run `npm run doctor -- --online` first; it checks the tools, keys and config, and says how to fix each problem. |
 | The app says "Web UI not built yet" | Run `npm run web:build`, then restart `npm run app`. |
 | Phone can't open the app | Both devices signed in to Tailscale? Is `npm run app` still running on the Mac? Allow `node` in the macOS firewall prompt. |

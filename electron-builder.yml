@@ -1,5 +1,5 @@
 appId: com.reesmcd.sessionbot
-productName: Session Bot
+productName: Scrying Eye
 copyright: Copyright © 2026 Rees McDevitt
 directories:
   output: release
@@ -30,13 +30,16 @@ mac:
       arch: [arm64]
   category: public.app-category.productivity
   icon: electron/assets/icon.png
-  # No Apple Developer ID: the app is ad-hoc signed. First launch needs right-click → Open
-  # (or System Settings → Privacy & Security → Open Anyway).
-  identity: null
+  # No Apple Developer ID, so sign ad-hoc ("-"). Skipping signing (null) left the bundle unsealed,
+  # which macOS reports as "damaged" with no way to open it. Ad-hoc signed, the first launch only
+  # needs System Settings → Privacy & Security → Open Anyway.
+  # Hardened runtime would reject Electron's own frameworks under an ad-hoc signature.
+  identity: "-"
+  hardenedRuntime: false
   extendInfo:
     LSUIElement: true
-  artifactName: Session-Bot-${version}-${arch}-mac.${ext}
+  artifactName: Scrying-Eye-${version}-${arch}-mac.${ext}
 dmg:
-  title: Session Bot
-  artifactName: Session-Bot-${version}-${arch}.${ext}
+  title: Scrying Eye
+  artifactName: Scrying-Eye-${version}-${arch}.${ext}
 publish: null
