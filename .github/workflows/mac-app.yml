@@ -39,19 +39,30 @@ jobs:
           done
           wait $PID || true
           grep '^SMOKE PASS' smoke.log
+      # The small update (#64): our code without Electron, and which Electron it was built for.
+      - name: Package the small update
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          RES="release/mac-arm64/Session Bot.app/Contents/Resources"
+          (cd "$RES" && zip -qry "$GITHUB_WORKSPACE/release/Session-Bot-$VERSION-arm64-app.zip" app.asar app.asar.unpacked web prompts assets)
+          node -e "require('fs').writeFileSync('release/update.json', JSON.stringify({ version: require('./package.json').version, electron: require('electron/package.json').version }) + '\n')"
+          cat release/update.json
+      - name: Install the small update and launch it (as the app would)
+        run: npx tsx scripts/check-update.ts "release/mac-arm64/Session Bot.app" release/*-app.zip "$(node -p "require('./package.json').version")"
       - uses: actions/upload-artifact@v4
         with:
           name: Session-Bot-mac
           path: |
             release/*.dmg
             release/*.zip
+            release/update.json
           if-no-files-found: error
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" release/*.dmg release/*.zip \
+          gh release create "${GITHUB_REF_NAME}" release/*.dmg release/*.zip release/update.json \
             --title "Session Bot ${GITHUB_REF_NAME}" \
-            --notes "Download the .dmg, open it and drag Session Bot to Applications. First launch: right-click the app → Open (see README → Install the Mac app)." \
-            || gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip --clobber
+            --notes "Already have Session Bot 0.4 or later? Use Install Update in its menu. Otherwise: download the .dmg, open it and drag Session Bot to Applications. First launch: right-click the app → Open (see README → Install the Mac app)." \
+            || gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip release/update.json --clobber
