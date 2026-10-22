@@ -3,11 +3,11 @@
  * process. Data lives in ~/Library/Application Support/Session Bot/.
  */
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerSaveBlocker, safeStorage, shell, Tray, type MenuItemConstructorOptions } from 'electron';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { accessSync, constants, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { generateDependencyReport } from '@discordjs/voice';
 import { BotService } from '../src/bot/BotService.js';
 import { MusicBrowser } from './music/MusicBrowser.js';
@@ -15,7 +15,7 @@ import { startServer, type RunningServer } from '../src/app/startServer.js';
 import { listSessions } from '../src/app/sessions.js';
 import { PROMPT_NAMES } from '../src/app/promptStore.js';
 import { buildMenu, elapsed, type MenuAction, type MenuItem } from './menuModel.js';
-import { checkForUpdate } from './updates.js';
+import { bundlePath, checkForUpdate, downloadVerified, parseManifest, planUpdate, stageCommands, swapScript, type Release } from './updates.js';
 import { applyToEnv, generatePassword, SecretStore, type Cipher } from './secrets.js';
 
 const SMOKE = process.argv.includes('--smoke-test');
@@ -61,7 +61,9 @@ let music: MusicBrowser;
 const captured = { frames: 0, sumSquares: 0, samples: 0 };
 let tray: Tray | undefined;
 let win: BrowserWindow | undefined;
-let update: { version: string; url: string } | null = null;
+let update: Release | null = null;
+/** What an update in progress is doing, for the menu. */
+let updating: string | null = null;
 let sleepBlocker: number | undefined;
 let quitting = false;
 
@@ -145,6 +147,9 @@ async function run(action: MenuAction): Promise<void> {
       case 'update':
         await shell.openExternal(action.url);
         break;
+      case 'installUpdate':
+        await installUpdate();
+        break;
       case 'checkUpdates':
         update = await checkForUpdate(app.getVersion()).catch(() => null);
         if (!update) void dialog.showMessageBox({ message: `You're up to date (${app.getVersion()}).` });
@@ -173,6 +178,7 @@ function refreshTray(): void {
     recent,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
     update,
+    updating,
     now: Date.now(),
     missingKeys: missingKeys(),
   };
@@ -230,6 +236,82 @@ function registerIpc(): void {
     const ok = b && [b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n) && n >= 0);
     music.show(win, ok ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null);
   });
+}
+
+// --- Updates (#64) -----------------------------------------------------------------------------
+/** Written once the app is up, so the update script knows the new version started. */
+const launchedMarker = join(userData, 'launched-version');
+
+const canWrite = (path: string) => {
+  try {
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Downloads, verifies and installs the update, then quits; a script swaps the app and restarts it. */
+async function installUpdate(): Promise<void> {
+  const release = update;
+  if (!release || updating) return;
+  const appPath = app.isPackaged ? bundlePath(process.execPath) : null;
+  if (!appPath || !canWrite(dirname(appPath)) || !canWrite(appPath)) {
+    await shell.openExternal(release.url);
+    void dialog.showMessageBox({ message: 'Install this one by hand', detail: 'Session Bot can update itself once it lives in Applications (not on the disk image). Download it from the page that just opened.' });
+    return;
+  }
+  if (bot.status().recording) throw new Error('Stop the recording first: the app restarts to update.');
+  if (server?.encounters.current()?.status === 'running') throw new Error('End the encounter first: the app restarts to update.');
+  const manifest = release.manifest ? parseManifest(await (await fetch(release.manifest.url)).json().catch(() => null)) : null;
+  const plan = planUpdate(release, manifest, process.versions.electron);
+  if (!plan) {
+    await shell.openExternal(release.url);
+    return;
+  }
+  const mb = Math.max(1, Math.round(plan.asset.size / 1_048_576));
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Install and Restart', 'Later'],
+    message: `Install Session Bot ${release.version}?`,
+    detail: `It downloads ${mb} MB${plan.kind === 'app' ? ' (just the app’s own code)' : ''}, then restarts, which takes about a minute. Your sessions and settings stay as they are.`,
+  });
+  if (response !== 0) return;
+
+  const dir = join(userData, 'updates');
+  const staging = join(dir, 'staging');
+  mkdirSync(dir, { recursive: true });
+  try {
+    let shown = -1;
+    updating = `Downloading ${release.version}…`;
+    refreshTray();
+    const zip = join(dir, plan.asset.name);
+    await downloadVerified(plan.asset, zip, fetch, (f) => {
+      const pct = Math.floor(f * 10) * 10;
+      if (pct === shown) return;
+      shown = pct;
+      updating = `Downloading ${release.version}… ${pct}%`;
+      refreshTray();
+    });
+    updating = `Installing ${release.version}…`;
+    refreshTray();
+    for (const [cmd, ...args] of stageCommands({ kind: plan.kind, zip, currentApp: appPath, staging, version: release.version })) {
+      const r = spawnSync(cmd!, args, { encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(`Couldn't prepare the update (${basename(cmd!)}): ${(r.stderr || r.error?.message || '').trim().slice(0, 300)}`);
+    }
+    const script = join(dir, 'swap.sh');
+    writeFileSync(script, swapScript({ pid: process.pid, appPath, newApp: join(staging, 'Session Bot.app'), previous: join(dir, 'previous.app'), marker: launchedMarker, version: release.version }), { mode: 0o755 });
+    spawn('/bin/bash', [script], { detached: true, stdio: 'ignore' }).unref();
+    log(`updating to ${release.version} (${plan.kind}); restarting`);
+  } catch (err) {
+    updating = null;
+    throw err;
+  }
+  quitting = true;
+  music?.close();
+  await bot.shutdown();
+  await server?.close();
+  app.exit(0);
 }
 
 async function quit(): Promise<void> {
@@ -296,6 +378,7 @@ async function smokeTest(): Promise<void> {
     results.prompts = (await (await fetch(`${server!.url}/api/prompts`, { headers: { Authorization: `Bearer ${secrets.password}` } })).json()) as unknown as object;
     results.prompts = Array.isArray((results.prompts as { prompts?: unknown[] }).prompts) && (results.prompts as { prompts: unknown[] }).prompts.length === PROMPT_NAMES.length;
     results.tray = !!tray;
+    results.updater = !!bundlePath(process.execPath);
     // Music: a tab playing a tone is captured, mixed and turned into PCM frames for the bot.
     const tab = music.openTab(TONE_PAGE);
     await new Promise((r) => setTimeout(r, 4000));
@@ -388,6 +471,12 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
     refreshTray();
 
     if (SMOKE) return void smokeTest();
+
+    // Tell an update in progress that this version started, and say if the last one didn't.
+    writeFileSync(launchedMarker, app.getVersion());
+    if (process.argv.includes('--update-failed')) {
+      void dialog.showMessageBox({ type: 'warning', message: 'The update didn’t start, so Session Bot went back to this version.', detail: 'Try again from the menu, or install it by hand from the release page.' });
+    }
 
     await startBot();
     update = await checkForUpdate(app.getVersion()).catch(() => null);

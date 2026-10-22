@@ -33,8 +33,17 @@ transcription and recap steps, and the web app.
    Tailscale, and your phone signs in with the password shown there.
 
 Your recordings, transcripts, recaps and settings are in `~/Library/Application Support/Session Bot/`.
-The app shows a notice in its menu when a new version is out. Download it and drag it into
-Applications again; your data stays.
+**Updates (0.4 and later):** when a new version is out, the menu shows **Install Update (x.y.z)…**.
+- **One click:** it downloads the update, checks it against the checksum GitHub publishes,
+  installs it and restarts, in about a minute. Your data stays.
+- **Small:** most updates are a few MB, because they're only the app's own code. When the
+  framework underneath (Electron) changes, it downloads the whole app instead.
+- **No security prompt:** there's no Privacy & Security step after an update.
+- **Never mid-session:** it won't update while recording or with an encounter running.
+- **Safe:** if the new version doesn't start, the app puts the old one back and tells you.
+- **The one requirement:** the app must be in **Applications**. Running from the disk image, it
+  opens the release page to download by hand instead. Older versions (0.3 and before) update by
+  hand once; after that it's one click.
 
 Every push to `main` also builds the app. The build is under **Actions → Mac app → the latest
 run → Artifacts**, and you need to be signed in to GitHub to download it. Tagged versions
