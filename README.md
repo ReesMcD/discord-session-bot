@@ -440,6 +440,12 @@ What's in it:
   - **The tracker:** Next and Previous turn, damage and healing with temporary HP, the 2024
     conditions (optionally for N rounds, counting down on the right turn), concentration with its
     save DC, hiding and revealing, and each monster's stat block.
+  - **The battle map:** a wiki encounter's map (walls, doors, water, difficult ground, cover,
+    elevation, trees and the like), with a token per combatant: the current turn ringed, HP bars,
+    hidden ones faded. Drag a token to move it; it snaps to squares, shows the distance in feet
+    and refuses walls, closed doors, deep water and occupied squares. **Doors** opens, closes and
+    locks them; **Difficult** marks or clears squares; combatants without a token are placed with a
+    tap. A blank encounter can get a blank grid. Pinch or scroll to zoom, drag the map to pan.
   - It survives an app restart, and every open view updates live.
 - **Players' link**: players follow the fight on their phone or in a browser, with nothing to
   install.
@@ -447,7 +453,8 @@ What's in it:
     once and the device remembers it.
   - They see whose turn it is ("Your turn" buzzes the phone), the party's HP and conditions, and
     whether monsters look healthy, bloodied or down.
-  - They change only their own character's HP, conditions and initiative.
+  - They change only their own character's HP, conditions and initiative, and move only their own
+    token on the map (hidden monsters and the DM's map notes never reach their phones).
   - To reach their phones it needs a public address: see **Settings → Players** (Tailscale Funnel).
   - **Posting the link:**
     - **From Discord:** `/encounter start` (pick one prepared in the wiki as you type, or type a

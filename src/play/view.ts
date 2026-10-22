@@ -1,5 +1,6 @@
 import type { Combatant, EncounterAction, EncounterState, Health, PlayerCombatant, PlayerRequest, PlayerView } from '../shared/types.js';
 import { CONDITIONS, EncounterError } from '../encounter/rules.js';
+import { playersMap } from '../shared/battlemap.js';
 
 /** How hurt a monster looks: down at 0, bloodied at half or less (the usual table call). */
 export function healthOf(c: Combatant): Health | null {
@@ -10,7 +11,8 @@ export function healthOf(c: Combatant): Health | null {
 
 /**
  * One player's view of the encounter. Leaves out hidden combatants entirely, monsters' and NPCs'
- * numbers (only how hurt they look), initiative values, stat blocks, DM notes, the log and the map.
+ * numbers (only how hurt they look), initiative values, stat blocks, DM notes and the log. The
+ * map leaves out hidden tokens and the DM's notes.
  */
 export function playerView(s: EncounterState, me: string | null): PlayerView {
   const visible = (c: Combatant | undefined): c is Combatant => !!c && !c.hidden;
@@ -42,6 +44,8 @@ export function playerView(s: EncounterState, me: string | null): PlayerView {
     party: s.combatants.filter(pc).map((c) => ({ id: c.id, name: c.name, taken: taken.has(c.id) })),
     myInitiative: mine?.initiative ?? null,
     myAc: mine?.ac ?? null,
+    map: s.map ? playersMap(s.map, new Set(s.combatants.filter((c) => c.hidden && c.tokenId).map((c) => c.tokenId!))) : null,
+    tokens: Object.fromEntries(order.filter((c) => c.tokenId).map((c) => [c.id, c.tokenId!])),
   };
 }
 
@@ -61,6 +65,9 @@ export function playerAction(s: EncounterState, me: string | null, request: Play
     case 'condition':
       if (!CONDITIONS.includes(request.name)) throw new EncounterError('Unknown condition');
       return { type: 'condition', id: mine.id, name: request.name, ...(request.remove ? { remove: true } : {}) };
+    case 'move':
+      if (!mine.tokenId) throw new EncounterError('You’re not on the map yet: ask the DM to place you');
+      return { type: 'move', token: mine.tokenId, at: request.at };
     default:
       throw new EncounterError('Unknown request');
   }

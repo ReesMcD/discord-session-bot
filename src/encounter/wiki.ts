@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { Combatant, EncounterState, WikiEncounter, WikiEncounterSummary } from '../shared/types.js';
+import { readMap } from '../shared/battlemap.js';
 import { combatantId, makeCombatant, newEncounter, sortOrder } from './rules.js';
 
 /**
@@ -77,26 +78,20 @@ export class WikiEncounters {
   }
 }
 
-interface MapToken {
-  id?: unknown;
-  name?: unknown;
-  kind?: unknown;
-  hidden?: unknown;
-}
 
 /** An encounter ready to set up: the party, every creature (one per copy), stat blocks, the map and the DM's notes. */
 export function encounterFromWiki(w: WikiEncounter, id: string, now: number): EncounterState {
   const s = newEncounter(id, w.title, now);
   s.source = { wikiId: w.id, campaign: w.campaign };
   s.notes = { summary: w.summary, read_aloud: w.read_aloud, setup: w.setup, tactics: w.tactics, changes: w.changes, treasure: w.treasure };
-  s.map = w.map;
-  const tokens = (Array.isArray(w.map?.tokens) ? (w.map.tokens as MapToken[]) : []).filter((t) => typeof t.id === 'string' && typeof t.name === 'string');
+  s.map = readMap(w.map);
+  const tokens = s.map?.tokens ?? [];
   const used = new Set<string>();
   /** The map token for a combatant: the same name, else the next unused one of its kind whose name starts the same. */
   const tokenFor = (name: string, base: string, kind: string) => {
-    const exact = tokens.find((t) => !used.has(t.id as string) && t.name === name);
-    const t = exact ?? tokens.find((t) => !used.has(t.id as string) && t.kind === kind && String(t.name).toLowerCase().startsWith(base.toLowerCase()));
-    if (t) used.add(t.id as string);
+    const exact = tokens.find((t) => !used.has(t.id) && t.name === name);
+    const t = exact ?? tokens.find((t) => !used.has(t.id) && t.kind === kind && t.name.toLowerCase().startsWith(base.toLowerCase()));
+    if (t) used.add(t.id);
     return t;
   };
   const taken = new Set<string>();
@@ -106,7 +101,7 @@ export function encounterFromWiki(w: WikiEncounter, id: string, now: number): En
   };
   for (const p of w.party) {
     const t = tokenFor(p.name, p.name, 'pc');
-    add(makeCombatant(combatantId(p.name, taken), { name: p.name, kind: 'pc', ac: p.ac, hp: p.hp, player: p.player, ...(t ? { tokenId: t.id as string } : {}) }));
+    add(makeCombatant(combatantId(p.name, taken), { name: p.name, kind: 'pc', ac: p.ac, hp: p.hp, player: p.player, ...(t ? { tokenId: t.id } : {}) }));
   }
   for (const creature of w.creatures) {
     const { count, ...block } = creature;
@@ -124,7 +119,7 @@ export function encounterFromWiki(w: WikiEncounter, id: string, now: number): En
           dex: block.abilities?.[1] ?? null,
           ref: block.name,
           hidden: t?.hidden === true,
-          ...(t ? { tokenId: t.id as string } : {}),
+          ...(t ? { tokenId: t.id } : {}),
         }),
       );
     }
