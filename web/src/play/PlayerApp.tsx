@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ConditionName, PlayerCombatant, PlayerView } from '../../../src/shared/types';
 import { OrbMark } from '../icons';
 import { BattleMapView, type TokenInfo } from '../map/BattleMapView';
+import { useArtPlan } from '../map/useArtPlan';
 import { device, follow, play, PlayError } from './client';
 
 const CONDITIONS: ConditionName[] = ['Blinded', 'Charmed', 'Deafened', 'Exhaustion', 'Frightened', 'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'];
@@ -155,6 +156,7 @@ function Fight({ view, act }: { view: PlayerView; act: (r: Parameters<typeof pla
 /** The map: everyone visible, the party's HP, and my own token to drag. */
 function PlayerMap({ view, act }: { view: PlayerView; act: (r: Parameters<typeof play.act>[0]) => Promise<void> }) {
   const map = view.map!;
+  const art = useArtPlan(map, play.art);
   const myToken = view.me ? view.tokens[view.me] : undefined;
   const info: Record<string, TokenInfo> = {};
   for (const c of view.order) {
@@ -169,6 +171,8 @@ function PlayerMap({ view, act }: { view: PlayerView; act: (r: Parameters<typeof
         info={info}
         canMove={(t) => t === myToken}
         onMove={(_, at) => void act({ type: 'move', at })}
+        art={art}
+        loadArt={play.artImage}
         label={`Battle map, ${map.width} by ${map.height} squares`}
       />
       <p className="muted small map-hint">{myToken ? 'Drag your token (ringed) to move. Pinch to zoom, drag the map to look around.' : view.me ? 'The DM hasn’t put you on the map yet.' : 'Pinch to zoom, drag to look around.'}</p>

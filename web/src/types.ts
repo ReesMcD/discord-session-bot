@@ -3,6 +3,8 @@
 import type { Config, SessionDetailWithJobs } from '../../src/shared/types';
 
 export type {
+  ArtPlan,
+  ArtStatus,
   BotStatus,
   Combatant,
   CombatantKind,

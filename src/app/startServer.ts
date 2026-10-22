@@ -1,3 +1,4 @@
+import { MapArt } from '../battlemap/library.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -77,6 +78,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
 
   const encounters = new EncounterStore(opts.dataDir, undefined, log);
   const wikiEncounters = wikiEncountersFor(opts.dataDir, configStore);
+  const mapArt = new MapArt(() => configStore.read().config?.battle_maps.assets_dir);
   opts.bot?.attachEncounters({
     store: encounters,
     wiki: wikiEncounters,
@@ -98,6 +100,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
       jobs,
       encounters,
       wikiEncounters,
+      mapArt,
       ...(opts.bot ? { bot: opts.bot } : {}),
       ...(opts.music ? { music: opts.music } : {}),
       ...(opts.corsOrigins ? { corsOrigins: opts.corsOrigins } : {}),
@@ -126,7 +129,7 @@ export function startServer(opts: ServerOptions): Promise<RunningServer> {
   const players =
     opts.players === false
       ? Promise.resolve(null)
-      : startPlayerServer(encounters, { port: playerPort, webDist }).catch((err: Error) => {
+      : startPlayerServer(encounters, { port: playerPort, webDist, art: mapArt }).catch((err: Error) => {
           log(`The players' page couldn't start on port ${playerPort}: ${err.message}. Change players.port in Settings.`);
           return null;
         });

@@ -47,6 +47,11 @@ characters: {}
 #    campaign: strahd
 #    speaker: sam
 
+# Battle map art: a folder of map pictures on this Mac (e.g. Forgotten Adventures packs), matched by
+# file name. Shown only to your own game; never copied or uploaded.
+# battle_maps:
+#   assets_dir: /Users/you/Documents/Forgotten Adventures
+
 transcription:
   provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)
   # model: whisper-large-v3-turbo   # default per provider; OpenAI needs whisper-1 for timestamps

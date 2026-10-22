@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { api, apiBlob } from '../../api';
 import { doorsAt, isDifficult, type Cell, type MapToken } from '../../../../src/shared/battlemap';
 import { BattleMapView, type TokenInfo } from '../../map/BattleMapView';
-import type { EncounterAction, EncounterState } from '../../types';
+import { useArtPlan } from '../../map/useArtPlan';
+import type { ArtPlan, EncounterAction, EncounterState } from '../../types';
 import { Segmented } from '../../ui';
 
 type Act = (action: EncounterAction) => Promise<void>;
@@ -15,6 +17,7 @@ export function MapCard({ state, act, onSelect }: { state: EncounterState; act: 
   const [placing, setPlacing] = useState<string | null>(null);
   const [size, setSize] = useState({ width: '20', height: '15' });
   const map = state.map;
+  const art = useArtPlan(map, () => api<ArtPlan | null>('/encounter/art'));
 
   if (!map)
     return (
@@ -97,6 +100,8 @@ export function MapCard({ state, act, onSelect }: { state: EncounterState; act: 
         onMove={(token, at) => void act({ type: 'move', token, at })}
         onTap={onTap}
         showNotes
+        art={art}
+        loadArt={(id) => apiBlob(`/art/${encodeURIComponent(id)}`)}
         label={`Battle map, ${map.width} by ${map.height} squares`}
       />
       <p className="muted small map-hint">
@@ -112,3 +117,4 @@ export function MapCard({ state, act, onSelect }: { state: EncounterState; act: 
     </section>
   );
 }
+
