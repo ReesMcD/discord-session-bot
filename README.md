@@ -424,8 +424,13 @@ What's in it:
   volume and mute, plus a master volume. The bot only plays while it's in a channel, so start a
   recording first. The browser itself shows on the Mac; from the phone you can open, mute, change
   volume and close tabs. *Also play on this Mac* lets you hear the mix locally (capturing a tab
-  silences it on the Mac otherwise). Spotify won't play: its web player needs DRM (Widevine), which
-  the app's browser doesn't include. The bot's own audio isn't recorded.
+  silences it on the Mac otherwise). The bot's own audio isn't recorded.
+  - **Spotify**: its web player won't play in the app's browser (it needs DRM), so the Mac app is a
+    **Spotify Connect** speaker instead, named "Scrying Eye". Install
+    [librespot](https://github.com/librespot-org/librespot) once (`brew install librespot`; it
+    needs Spotify Premium), then in the Spotify app on your phone or Mac pick **Scrying Eye** as
+    the device and play: it's mixed in like a tab, with its own volume and mute on the Music page.
+    librespot is an unofficial open-source Spotify client; it can be turned off there.
   - **Scenes**: save the open tabs (with their volumes) as a scene, like "Tavern" or "Combat". One tap
     switches to it, crossfading (cut, 3 s or 8 s): its tabs fade in, the others fade out and close.
     A page in both scenes keeps playing.

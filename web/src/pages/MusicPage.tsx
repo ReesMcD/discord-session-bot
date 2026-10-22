@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, subscribe } from '../api';
-import type { MusicLibraryState, MusicStatus, MusicTab } from '../types';
+import type { MusicLibraryState, MusicStatus, MusicTab, SpotifyStatus } from '../types';
 import { ScenesCard, SoundboardCard } from './MusicLibrary';
 import { Empty, Toggle } from '../ui';
 
@@ -63,6 +63,8 @@ export function MusicPage() {
         <SoundboardCard library={library} status={status} onLibrary={setLibrary} onStatus={setStatus} onError={setError} />
       </div>
 
+      {status.spotify && <SpotifyCard spotify={status.spotify} onChange={(patch) => call('PATCH', '/music/spotify', patch)} />}
+
       <form className="card music-open" onSubmit={submit}>
         <label htmlFor="music-url" className="visually-hidden">
           Web address
@@ -102,6 +104,69 @@ export function MusicPage() {
 
       {window.sessionBot && active && <BrowserArea key={active.id} title={active.title} />}
     </div>
+  );
+}
+
+/** Spotify Connect: play from the Spotify app to this Mac's speaker and it's mixed in like a tab. */
+function SpotifyCard({ spotify, onChange }: { spotify: SpotifyStatus; onChange: (patch: { enabled?: boolean; volume?: number; muted?: boolean }) => void }) {
+  const on = spotify.state !== 'off' && spotify.state !== 'missing';
+  return (
+    <section className="card">
+      <div className="row spread">
+        <h2 className="eyebrow" style={{ margin: 0 }}>
+          Spotify
+        </h2>
+        {spotify.state !== 'missing' && (
+          <button type="button" className="link" onClick={() => onChange({ enabled: !on })}>
+            {on ? 'Turn off' : 'Turn on'}
+          </button>
+        )}
+      </div>
+      {spotify.state === 'missing' ? (
+        <p className="small" style={{ marginBottom: 0 }}>
+          Spotify's web player won't play in the app's browser (it needs DRM), so Scrying Eye plays Spotify as a <strong>Spotify Connect</strong> speaker instead. It
+          needs Spotify Premium and one install, in Terminal: <code>brew install librespot</code>. Then reopen this page.
+        </p>
+      ) : spotify.state === 'off' ? (
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          Off: “{spotify.device}” doesn't show up in Spotify.
+        </p>
+      ) : (
+        <>
+          <p className="small" style={{ margin: '6px 0' }}>
+            {spotify.state === 'playing' ? (
+              <>
+                <span className="eq on" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>{' '}
+                Playing{spotify.track ? `: ${spotify.track}` : ''}
+              </>
+            ) : spotify.state === 'error' ? (
+              <span className="bad-text">{spotify.error ?? 'Spotify Connect stopped; it restarts by itself.'}</span>
+            ) : (
+              <>
+                In the Spotify app, tap the devices icon and pick <strong>{spotify.device}</strong>. Play anything: it's mixed in here like a tab.
+              </>
+            )}
+          </p>
+          <div className="music-tab">
+            <span className="music-tab-text">
+              <strong>{spotify.device}</strong>
+              <span className="muted small">Spotify Connect</span>
+            </span>
+            <label className="music-slider">
+              <span className="visually-hidden">Spotify volume</span>
+              <input type="range" min={0} max={1} step={0.01} value={spotify.volume} disabled={spotify.muted} onChange={(e) => onChange({ volume: e.target.valueAsNumber })} />
+            </label>
+            <button type="button" onClick={() => onChange({ muted: !spotify.muted })} aria-pressed={spotify.muted}>
+              {spotify.muted ? 'Unmute' : 'Mute'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

@@ -444,6 +444,7 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
       onSilence: () => bot.music.stop(),
       inChannel: () => !!bot.status().recording,
       log,
+      spotify: { name: 'Scrying Eye', dir: join(userData, 'spotify') },
     });
     await music.start();
     try {
