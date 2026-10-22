@@ -31,8 +31,8 @@ started on the Mac itself:
 ```sh
 # one-time: install Claude Code (https://code.claude.com/docs) and sign in
 cd ~
-git clone https://github.com/ReesMcD/discord-session-bot.git
-cd discord-session-bot
+git clone https://github.com/ReesMcD/scrying-eye.git
+cd scrying-eye
 claude remote-control
 ```
 

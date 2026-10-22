@@ -1,4 +1,4 @@
-# discord-session-bot
+# Scrying Eye
 
 Record Discord voice calls with each speaker on a separate track, turn them into a timestamped,
 speaker-labelled transcript, and turn them into a session recap with Claude. It all runs on your own machine.
@@ -14,7 +14,7 @@ The easiest way to run it is **Scrying Eye.app**: a menu bar app that contains t
 transcription and recap steps, and the web app.
 
 1. **Download** the latest `Scrying-Eye-….dmg` from the
-   [Releases page](https://github.com/ReesMcD/discord-session-bot/releases/latest). It's for
+   [Releases page](https://github.com/ReesMcD/scrying-eye/releases/latest). It's for
    Apple Silicon Macs. Open it and drag **Scrying Eye** into **Applications**.
 2. **First launch:** the app isn't signed with an Apple Developer ID, so macOS blocks it the first
    time. Open it once, then go to **System Settings → Privacy & Security** and click
@@ -90,8 +90,8 @@ ffmpeg -version    # any recent version
 ### 2. Get the code
 
 ```sh
-git clone https://github.com/ReesMcD/discord-session-bot.git
-cd discord-session-bot
+git clone https://github.com/ReesMcD/scrying-eye.git
+cd scrying-eye
 npm install
 npm run check:deps                   # should end with "Voice dependencies OK"
 ```
