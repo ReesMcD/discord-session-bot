@@ -17,6 +17,10 @@ import { musicRoutes } from './musicRoutes.js';
 import { MusicLibrary } from '../music/library.js';
 import { UPLOAD_TOKEN_ENV, testUpload } from '../upload/recapUpload.js';
 import { configSchema } from '../config/schema.js';
+import { encounterRoutes } from './encounterRoutes.js';
+import { EncounterStore } from '../encounter/store.js';
+import { WikiEncounters } from '../encounter/wiki.js';
+import type { EncounterState } from '../shared/types.js';
 
 export interface ApiOptions {
   password: PasswordSource;
@@ -35,12 +39,25 @@ export interface ApiOptions {
   uploadFetch?: typeof fetch;
   /** Throttles wrong passwords (tests pass their own clock). */
   signInLimiter?: SignInLimiter;
+  /** The encounter being run (default: one kept in dataDir). */
+  encounters?: EncounterStore;
+  /** For tests: the HTTP client for calls out (the wiki's encounters, the join link check). */
+  httpFetch?: typeof fetch;
+  /** The wiki's encounters (default: from the upload settings and WIKI_UPLOAD_TOKEN). */
+  wikiEncounters?: WikiEncounters;
+}
+
+/** The wiki's encounters, from the same address and key as recap uploads. */
+export function wikiEncountersFor(dataDir: string, configStore: ConfigStore, doFetch?: typeof fetch): WikiEncounters {
+  return new WikiEncounters(dataDir, () => configSchema.parse(configStore.read().config ?? {}), () => process.env[UPLOAD_TOKEN_ENV], doFetch);
 }
 
 const STEPS: JobStep[] = ['transcribe', 'merge', 'disambiguate', 'summarize', 'upload'];
 
 export function createApi(opts: ApiOptions): Hono {
   const api = new Hono();
+  const encounters = opts.encounters ?? new EncounterStore(opts.dataDir);
+  const wikiEncounters = opts.wikiEncounters ?? wikiEncountersFor(opts.dataDir, opts.configStore, opts.httpFetch);
   if (opts.corsOrigins?.length) {
     api.use('*', cors({ origin: opts.corsOrigins, allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
   }
@@ -162,7 +179,9 @@ export function createApi(opts: ApiOptions): Hono {
       const sendBot = (status: BotStatus) => void stream.writeSSE({ event: 'bot', data: JSON.stringify(status) });
       const sendMusic = (status: MusicStatus) => void stream.writeSSE({ event: 'music', data: JSON.stringify(status) });
       const sendLive = (update: LiveUpdate) => void stream.writeSSE({ event: 'live', data: JSON.stringify(update) });
+      const sendEncounter = (state: EncounterState | null) => void stream.writeSSE({ event: 'encounter', data: JSON.stringify(state) });
       opts.bot?.on('live', sendLive);
+      encounters.on('encounter', sendEncounter);
       opts.jobs.on('job', send);
       opts.bot?.on('status', sendBot);
       opts.music?.on('status', sendMusic);
@@ -174,6 +193,7 @@ export function createApi(opts: ApiOptions): Hono {
       opts.bot?.off('status', sendBot);
       opts.music?.off('status', sendMusic);
       opts.bot?.off('live', sendLive);
+      encounters.off('encounter', sendEncounter);
     }),
   );
 
@@ -202,6 +222,19 @@ export function createApi(opts: ApiOptions): Hono {
   });
 
   api.route('/music', musicRoutes(opts.music, new MusicLibrary(opts.dataDir)));
+  api.route(
+    '/',
+    encounterRoutes(
+      encounters,
+      wikiEncounters,
+      () => {
+        const players = configSchema.parse(opts.configStore.read().config ?? {}).players;
+        return { publicUrl: players.public_url, port: players.port };
+      },
+      opts.httpFetch,
+      opts.bot,
+    ),
+  );
 
   // --- Config -----------------------------------------------------------------------------------
   /** Sends a test request with the upload settings given (unsaved edits included). */

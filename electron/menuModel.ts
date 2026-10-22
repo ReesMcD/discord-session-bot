@@ -17,6 +17,7 @@ export type MenuAction =
   | { kind: 'open'; route?: string }
   | { kind: 'toggleLogin' }
   | { kind: 'update'; url: string }
+  | { kind: 'installUpdate' }
   | { kind: 'checkUpdates' }
   | { kind: 'quit' };
 
@@ -26,6 +27,8 @@ export interface MenuState {
   recent: SessionSummary[];
   openAtLogin: boolean;
   update: { version: string; url: string } | null;
+  /** While an update downloads and installs: what it's doing ("Downloading 0.4.0… 40%"). */
+  updating?: string | null;
   now: number;
   missingKeys: string[];
 }
@@ -87,7 +90,13 @@ export function buildMenu(s: MenuState): MenuItem[] {
   }
   items.push({ label: 'Settings…', action: { kind: 'open', route: 'settings' } }, sep);
   items.push({ label: 'Open at Login', type: 'checkbox', checked: s.openAtLogin, action: { kind: 'toggleLogin' } });
-  items.push(s.update ? { label: `Update Available (${s.update.version})…`, action: { kind: 'update', url: s.update.url } } : { label: 'Check for Updates', action: { kind: 'checkUpdates' } });
+  if (s.updating) items.push({ label: s.updating, enabled: false });
+  else if (s.update)
+    items.push(
+      { label: `Install Update (${s.update.version})…`, action: { kind: 'installUpdate' } },
+      { label: `What’s New in ${s.update.version}`, action: { kind: 'update', url: s.update.url } },
+    );
+  else items.push({ label: 'Check for Updates', action: { kind: 'checkUpdates' } });
   items.push(sep, { label: 'Quit Session Bot', action: { kind: 'quit' } });
   return items;
 }

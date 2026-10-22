@@ -312,3 +312,241 @@ export interface MusicStatus {
   /** Soundboard effects playing now (their IDs). */
   playingSounds: string[];
 }
+
+// --- Encounters ----------------------------------------------------------------------------------
+
+/** The 2024 conditions (Exhaustion has levels). */
+export type ConditionName =
+  | 'Blinded'
+  | 'Charmed'
+  | 'Deafened'
+  | 'Exhaustion'
+  | 'Frightened'
+  | 'Grappled'
+  | 'Incapacitated'
+  | 'Invisible'
+  | 'Paralyzed'
+  | 'Petrified'
+  | 'Poisoned'
+  | 'Prone'
+  | 'Restrained'
+  | 'Stunned'
+  | 'Unconscious';
+
+export interface Condition {
+  name: ConditionName;
+  /** Exhaustion only: 1–6. */
+  level?: number;
+  /** Rounds left. Absent: until removed. */
+  rounds?: number;
+  /** When `rounds` counts down: at the start or end of this combatant's turn (often the caster's). */
+  tick?: { on: 'start' | 'end'; of: string };
+}
+
+export type CombatantKind = 'pc' | 'monster' | 'npc';
+
+export interface Combatant {
+  id: string;
+  name: string;
+  kind: CombatantKind;
+  /** Null until rolled or typed in. */
+  initiative: number | null;
+  initiativeBonus: number;
+  /** Dexterity score: breaks initiative ties. */
+  dex: number | null;
+  ac: number | null;
+  hp: number | null;
+  maxHp: number | null;
+  tempHp: number;
+  conditions: Condition[];
+  /** The spell being concentrated on, if any. */
+  concentrating: string | null;
+  /** Set when damage calls for a Concentration save: its DC. Cleared when the DM records the result. */
+  concentrationCheck: number | null;
+  /** Hidden from players until revealed (an ambusher). */
+  hidden: boolean;
+  /** Monsters: the stat block's name (Bestiary page or SRD). */
+  ref?: string;
+  /** The battle map token this combatant moves. */
+  tokenId?: string;
+  /** PCs: who plays them. */
+  player?: string | null;
+}
+
+/** A monster's numbers from the wiki, for the stat block view. */
+export interface EncounterStatBlock {
+  name: string;
+  source: 'bestiary' | 'srd' | 'unknown';
+  cr?: string;
+  xp?: number;
+  size?: string;
+  type?: string;
+  ac?: number;
+  hp?: number;
+  hit_dice?: string;
+  speed?: Record<string, number | boolean>;
+  initiative?: number;
+  abilities?: number[];
+  senses?: string;
+  languages?: string;
+  resistances?: string;
+  immunities?: string;
+  traits?: Array<{ name: string; desc: string }>;
+  actions?: Array<{ name: string; kind: string; desc: string }>;
+  stat_block?: string;
+}
+
+/** An encounter in the wiki's list (ReesMcD/dnd-wiki, GET /api/encounters). */
+export interface WikiEncounterSummary {
+  id: string;
+  title: string;
+  campaign: string;
+  place: string | null;
+  difficulty: string | null;
+  party_level: number | null;
+  xp: number | null;
+  status: string;
+  run: boolean;
+  updated: string | null;
+}
+
+/** One encounter from the wiki, ready to run (GET /api/encounters/<id>). */
+export interface WikiEncounter extends WikiEncounterSummary {
+  summary: string | null;
+  read_aloud: string | null;
+  setup: string | null;
+  tactics: string | null;
+  changes: string | null;
+  treasure: string | null;
+  creatures: Array<EncounterStatBlock & { count: number }>;
+  /** The battle map, in the wiki's docs/battlemap.md format (v1). */
+  map: Record<string, unknown> | null;
+  map_error?: string;
+  party: Array<{ name: string; player: string | null; level: number | null; class: string | null; race: string | null; ac: number | null; hp: number | null; passive_perception: number | null }>;
+}
+
+export interface EncounterLogEntry {
+  at: number;
+  round: number;
+  text: string;
+}
+
+export interface EncounterState {
+  id: string;
+  title: string;
+  /** setup: adding combatants and initiative; running: turns; ended: over. */
+  status: 'setup' | 'running' | 'ended';
+  round: number;
+  /** Whose turn it is (a combatant id), while running. */
+  turn: string | null;
+  /** Combatant ids in turn order. */
+  order: string[];
+  combatants: Combatant[];
+  /** Where it came from, when loaded from the wiki. */
+  source?: { wikiId: string; campaign: string };
+  /** DM text from the wiki: read-aloud, setup, tactics, treasure. */
+  notes?: Pick<WikiEncounter, 'summary' | 'read_aloud' | 'setup' | 'tactics' | 'changes' | 'treasure'>;
+  statBlocks: Record<string, EncounterStatBlock>;
+  map: Record<string, unknown> | null;
+  startedAt: number;
+  endedAt?: number;
+  log: EncounterLogEntry[];
+  /** The players' join link (its secret code) and who has joined. */
+  join?: { code: string; players: JoinedPlayer[] };
+}
+
+/** A device that joined through the link. Only a hash of its token is kept. */
+export interface JoinedPlayer {
+  tokenHash: string;
+  /** The PC they play, or null for a guest who watches. */
+  combatantId: string | null;
+  joinedAt: number;
+}
+
+/** What happened, kept when an encounter ends. */
+export interface EncounterOutcome {
+  id: string;
+  title: string;
+  rounds: number;
+  startedAt: number;
+  endedAt: number;
+  /** Monsters and NPCs at 0 HP. */
+  defeated: string[];
+  /** PCs at 0 HP or unconscious. */
+  downed: string[];
+  /** Monsters and NPCs still standing. */
+  standing: string[];
+  text: string;
+}
+
+/** Changes to a running encounter, sent by the DM's views. */
+export type EncounterAction =
+  | { type: 'add'; combatant: { name: string; kind?: CombatantKind; ac?: number | null; hp?: number | null; initiativeBonus?: number; dex?: number | null; hidden?: boolean; ref?: string; count?: number } }
+  | { type: 'remove'; id: string }
+  | { type: 'update'; id: string; name?: string; ac?: number | null; hp?: number | null; maxHp?: number | null }
+  | { type: 'initiative'; id: string; value: number | null }
+  | { type: 'rollInitiative'; ids?: string[] }
+  | { type: 'reorder'; order: string[] }
+  | { type: 'begin' }
+  | { type: 'next' }
+  | { type: 'previous' }
+  | { type: 'damage'; id: string; amount: number }
+  | { type: 'heal'; id: string; amount: number }
+  | { type: 'tempHp'; id: string; amount: number }
+  | { type: 'condition'; id: string; name: ConditionName; remove?: boolean; level?: number; rounds?: number; tick?: { on: 'start' | 'end'; of: string } }
+  | { type: 'concentrate'; id: string; spell: string | null }
+  | { type: 'concentrationResult'; id: string; kept: boolean }
+  | { type: 'reveal'; id: string; hidden?: boolean };
+
+// --- The player view (the public join link) ------------------------------------------------------
+
+/** How a monster or NPC looks to players: never its numbers. */
+export type Health = 'healthy' | 'bloodied' | 'down';
+
+export interface PlayerCombatant {
+  id: string;
+  name: string;
+  kind: CombatantKind;
+  current: boolean;
+  /** The PCs' numbers; null for monsters and NPCs. */
+  hp: number | null;
+  maxHp: number | null;
+  tempHp: number;
+  /** Monsters and NPCs: how hurt they look. */
+  health: Health | null;
+  conditions: Condition[];
+  concentrating: string | null;
+}
+
+/** What one player's device gets: no hidden combatants, no monster numbers, no DM notes. */
+export interface PlayerView {
+  title: string;
+  status: EncounterState['status'];
+  round: number;
+  /** Whose turn it is, when that combatant is visible. */
+  turn: string | null;
+  /** The PC this device plays, or null for a guest. */
+  me: string | null;
+  order: PlayerCombatant[];
+  /** For the join screen: the PCs, and whether a device already plays each. */
+  party: Array<{ id: string; name: string; taken: boolean }>;
+  /** My own initiative, while the DM is collecting them. */
+  myInitiative: number | null;
+  /** My AC (only mine). */
+  myAc: number | null;
+}
+
+/** What a player may change, and only on their own PC. */
+export type PlayerRequest =
+  | { type: 'initiative'; value: number }
+  | { type: 'damage' | 'heal' | 'tempHp'; amount: number }
+  | { type: 'condition'; name: ConditionName; remove?: boolean };
+
+/** GET /encounter/link: where players join. */
+export interface JoinLink {
+  /** The public link (Tailscale Funnel), when players.public_url is set. */
+  url: string | null;
+  /** The same page on this Mac, for trying it out. */
+  local: string | null;
+  publicUrlSet: boolean;
+}

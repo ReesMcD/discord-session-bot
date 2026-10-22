@@ -33,8 +33,17 @@ transcription and recap steps, and the web app.
    Tailscale, and your phone signs in with the password shown there.
 
 Your recordings, transcripts, recaps and settings are in `~/Library/Application Support/Session Bot/`.
-The app shows a notice in its menu when a new version is out. Download it and drag it into
-Applications again; your data stays.
+**Updates (0.4 and later):** when a new version is out, the menu shows **Install Update (x.y.z)…**.
+- **One click:** it downloads the update, checks it against the checksum GitHub publishes,
+  installs it and restarts, in about a minute. Your data stays.
+- **Small:** most updates are a few MB, because they're only the app's own code. When the
+  framework underneath (Electron) changes, it downloads the whole app instead.
+- **No security prompt:** there's no Privacy & Security step after an update.
+- **Never mid-session:** it won't update while recording or with an encounter running.
+- **Safe:** if the new version doesn't start, the app puts the old one back and tells you.
+- **The one requirement:** the app must be in **Applications**. Running from the disk image, it
+  opens the release page to download by hand instead. Older versions (0.3 and before) update by
+  hand once; after that it's one click.
 
 Every push to `main` also builds the app. The build is under **Actions → Mac app → the latest
 run → Artifacts**, and you need to be signed in to GitHub to download it. Tagged versions
@@ -105,8 +114,8 @@ You only need the keys for the steps you'll use.
    Treat it like a password. If it leaks, reset it here.
 3. The bot needs no privileged intents. Leave **Presence**, **Server Members** and **Message Content** off.
 4. Open **OAuth2 → URL Generator**:
-   - **Scopes:** `bot` and `applications.commands` (for `/record`, `/stop` and `/status`)
-   - **Bot permissions:** **View Channels**, **Connect**, **Speak** (to play music), **Send Messages**, **Attach Files**
+   - **Scopes:** `bot` and `applications.commands` (for `/record`, `/stop`, `/status` and `/encounter`)
+   - **Bot permissions:** **View Channels**, **Connect**, **Speak** (to play music), **Send Messages**, **Attach Files**, **Embed Links** (the encounter's join post)
 
    Added the bot before slash commands existed? The app's Record page shows a **Re-add the bot**
    link with all of this filled in. Adding it again keeps everything.
@@ -415,11 +424,53 @@ What's in it:
   - **Soundboard**: short effects (an audio file, or a link that's downloaded once) that play once
     over the music, each with its own volume. They work with no tab open too.
   - Scenes and sounds are kept in the data folder (`music/`), so they're set up once.
+- **Encounters**: run a fight.
+  - **Start one:** pick one Claude prepared in your wiki (ReesMcD/dnd-wiki, `wiki_battle`; it uses
+    the same address and key as **Upload**), or start a blank one.
+  - **Initiative:** monsters roll theirs, players type theirs (or send it from their phone), ties go
+    to Dexterity.
+  - **The tracker:** Next and Previous turn, damage and healing with temporary HP, the 2024
+    conditions (optionally for N rounds, counting down on the right turn), concentration with its
+    save DC, hiding and revealing, and each monster's stat block.
+  - It survives an app restart, and every open view updates live.
+- **Players' link**: players follow the fight on their phone or in a browser, with nothing to
+  install.
+  - Each encounter has its own secret link (copy it from the tracker). Players pick their character
+    once and the device remembers it.
+  - They see whose turn it is ("Your turn" buzzes the phone), the party's HP and conditions, and
+    whether monsters look healthy, bloodied or down.
+  - They change only their own character's HP, conditions and initiative.
+  - To reach their phones it needs a public address: see **Settings → Players** (Tailscale Funnel).
+  - **Posting the link:**
+    - **From Discord:** `/encounter start` (pick one prepared in the wiki as you type, or type a
+      name for a blank one) posts the link with a **Join** button in that channel. `/encounter link`
+      posts it again; `/encounter end` ends it and the link stops working.
+    - **From the app:** **Post to Discord** on the tracker posts into the chat of the voice channel
+      being recorded (or where `/encounter` was last used).
+    - Like `/record`, `/encounter` is for people with **Manage Server** by default. Players only
+      hear that a fight is over, never the DM's summary.
 
 **Security:** the app controls a bot that records people, so it always needs the password, and it
 only answers this Mac and your Tailscale devices. Other devices on your Wi-Fi get "forbidden" (set
 `APP_ALLOW_LAN=1` in `.env` if you want them in). After 10 wrong passwords in a minute, that device
 has to wait a minute. Don't expose port 4400 to the internet.
+
+**The players' link** is the one public part, on its own port (4410), and here is what it does
+and doesn't expose:
+- **The server:** it listens on this Mac only (127.0.0.1); Tailscale Funnel carries it to the
+  internet. It serves the player page, its files and a narrow API for the encounter running now,
+  and nothing else: no DM routes, no password, no other files.
+- **The link:** it holds a 128-bit random code, so it can't be guessed. It stops working when the
+  encounter ends or you make a new one. Each device gets its own token (only a hash is kept), and a
+  token can change only its own PC.
+- **What players never get:** hidden monsters, monsters' HP and AC, initiative values, stat blocks,
+  your notes, the log or the map.
+- **Abuse limits:** 120 requests a minute per player, a cap for everyone together, 4 KB per
+  request, no cross-site access, and a strict content policy. The link is never sent on as a
+  referrer.
+- **What the link can do:** anyone who has it can watch the fight and join as a character nobody
+  has claimed yet, so post it only where your players are. If it leaks, press **New link**.
+- **Stopping it:** to take it offline entirely, turn Funnel off (`tailscale funnel reset`).
 
 **Later on Vercel:** the pages can be hosted on Vercel, but the bot can't. It needs a
 long-running voice connection and local disk, which Vercel doesn't offer, so the bot and API

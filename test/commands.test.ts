@@ -99,12 +99,13 @@ test('/stop stops this server’s recording and says what happens next', async (
   assert.equal(bot.stops, 3);
 });
 
-test('commands: guild only; /record and /stop default to Manage Server, /status to everyone', () => {
+test('commands: guild only; /record, /stop and /encounter default to Manage Server, /status to everyone', () => {
   const byName = Object.fromEntries(COMMANDS.map((c) => [c.name, c]));
-  assert.deepEqual(Object.keys(byName).sort(), ['record', 'status', 'stop']);
+  assert.deepEqual(Object.keys(byName).sort(), ['encounter', 'record', 'status', 'stop']);
   for (const c of COMMANDS) assert.deepEqual(c.contexts, [0], `${c.name} works in servers only`);
   assert.equal(byName.record!.default_member_permissions, String(PermissionFlagsBits.ManageGuild));
   assert.equal(byName.stop!.default_member_permissions, String(PermissionFlagsBits.ManageGuild));
+  assert.equal(byName.encounter!.default_member_permissions, String(PermissionFlagsBits.ManageGuild));
   assert.equal(byName.status!.default_member_permissions, undefined);
   assert.equal(byName.record!.options?.[0]?.name, 'channel');
 });
@@ -115,5 +116,5 @@ test('the invite link asks for slash commands and every permission, Speak includ
   assert.equal(url.searchParams.get('scope'), 'bot applications.commands');
   const perms = BigInt(url.searchParams.get('permissions')!);
   assert.equal(perms, BOT_PERMISSIONS);
-  for (const p of ['ViewChannel', 'SendMessages', 'AttachFiles', 'Connect', 'Speak'] as const) assert.ok(perms & PermissionFlagsBits[p], p);
+  for (const p of ['ViewChannel', 'SendMessages', 'AttachFiles', 'EmbedLinks', 'Connect', 'Speak'] as const) assert.ok(perms & PermissionFlagsBits[p], p);
 });

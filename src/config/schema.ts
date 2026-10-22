@@ -184,6 +184,19 @@ export const configSchema = z
       })
       .strict()
       .prefault({}),
+
+    /**
+     * The players' join link (#47). Scrying Eye serves only the player page on this port, on this
+     * Mac alone (127.0.0.1); Tailscale Funnel makes it public: `tailscale funnel --bg <port>`.
+     */
+    players: z
+      .object({
+        /** The public address Funnel gives this Mac, e.g. https://my-mac.tail1234.ts.net. */
+        public_url: z.url({ protocol: /^https$/ }).optional(),
+        port: z.number().int().min(1024).max(65535).default(4410),
+      })
+      .strict()
+      .prefault({}),
   })
   .strict();
 
