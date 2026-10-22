@@ -4,6 +4,16 @@ import type { Config, SessionDetailWithJobs } from '../../src/shared/types';
 
 export type {
   BotStatus,
+  Combatant,
+  CombatantKind,
+  Condition,
+  ConditionName,
+  EncounterAction,
+  EncounterOutcome,
+  EncounterStatBlock,
+  EncounterState,
+  WikiEncounter,
+  WikiEncounterSummary,
   Config,
   ConfigState,
   FieldError,
