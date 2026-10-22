@@ -2,8 +2,8 @@ import { EventEmitter } from 'node:events';
 import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { campaignFor } from '../config/campaign.js';
-import { sharedAccounts, speakerNames, type Config } from '../config/schema.js';
+import { campaignFor, charactersByAccount, sharedAccounts, speakerNames } from '../config/roster.js';
+import type { Config } from '../config/schema.js';
 import type { UtteranceRecord } from '../recording/UtteranceRecorder.js';
 import { paths, readParticipants, readSessionInfo } from '../session/layout.js';
 import type { LiveTranscript, TranscriptLine } from '../shared/types.js';
@@ -126,7 +126,7 @@ export class LiveTranscriber extends EventEmitter {
       sessionStartMs: session.startedAt,
       aliases: speakerNames(config),
       participants: readParticipants(sessionDir),
-      ...(campaign ? { characters: Object.fromEntries(campaign.characters.map((c) => [c.userId, c.label])) } : {}),
+      ...(campaign ? { characters: charactersByAccount(config, campaign) } : {}),
       mergeGapMs: config.transcript.merge_gap_seconds * 1000,
       maxLineMs: config.transcript.max_line_seconds * 1000,
       noJoin: new Set(sharedAccounts(config).keys()),

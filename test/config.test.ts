@@ -17,10 +17,10 @@ test('unquoted Discord IDs keep full precision as keys and values', () => {
 recording:
   ignore_users: [234395307759108106, "334395307759108107"]
 speakers:
-  123456789012345678: Rees
+  rees: { name: Rees, discord: [123456789012345678] }
 `);
   assert.deepEqual(config.recording.ignore_users, ['234395307759108106', '334395307759108107']);
-  assert.deepEqual(config.speakers, { '123456789012345678': 'Rees' });
+  assert.deepEqual(config.speakers, { rees: { name: 'Rees', discord: ['123456789012345678'] } });
 });
 
 test('typos and bad values produce a readable ConfigError', () => {
@@ -37,8 +37,8 @@ test('the example config is valid', async () => {
   assert.equal(config.transcription.provider, 'groq');
 });
 
-test('a bad Discord ID used as a map key names the key and says what is wrong', () => {
-  assert.throws(() => parseConfig('speakers:\n  Rees: Rees\n'), /"Rees" must be a Discord ID \(15–22 digits\)\n  → at speakers\.Rees/);
-  const { errors } = ConfigStore.validate({ campaigns: { '12': { characters: {} } } });
-  assert.deepEqual(errors, [{ path: 'campaigns.12', message: '"12" must be a Discord ID (15–22 digits)' }]);
+test('a bad ID used as a map key names the key and says what is wrong', () => {
+  assert.throws(() => parseConfig('characters:\n  Thorin: { name: Thorin }\n'), /"Thorin" must be lowercase letters, digits and dashes, starting with a letter\n  → at characters\.Thorin/);
+  const { errors } = ConfigStore.validate({ campaigns: { '12': { name: 'Strahd' } } });
+  assert.deepEqual(errors, [{ path: 'campaigns.12', message: '"12" must be lowercase letters, digits and dashes, starting with a letter' }]);
 });

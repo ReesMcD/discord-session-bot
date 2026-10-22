@@ -1,52 +1,57 @@
 import { z } from 'zod';
+import { ROSTER_ID_RE } from '../shared/ids.js';
+import { migrateRoster } from './migrate.js';
 
 const snowflake = z.preprocess(
   (v) => (typeof v === 'number' ? String(v) : v),
   z.string().regex(/^\d{15,22}$/, 'must be a Discord ID (15–22 digits)'),
 );
 
-const sharedSpeaker = z
+const dndbeyondId = z.number().int().positive();
+const rosterKey = z.string().regex(ROSTER_ID_RE, 'must be lowercase letters, digits and dashes, starting with a letter');
+
+/** Someone who talks in sessions: a real person, named as they should appear in transcripts. */
+const speaker = z
   .object({
-    name: z.string().min(1).optional(),
+    name: z.string().min(1),
     /**
-     * The people/roles who talk on this account, e.g. "DM — narrates the world and NPCs". The text
-     * before " — ", " – ", " - " or ":" is the label used in transcripts; the rest is a hint for Claude.
+     * The Discord accounts they talk on. Several speakers on one account (a shared mic): Claude
+     * labels each of its lines with the right speaker before the recap.
      */
-    disambiguate: z.array(z.string().min(1)).min(2, 'list at least two identities to choose between').optional(),
+    discord: z.array(snowflake).default([]),
+    /** e.g. "DM, narrates the world and voices NPCs": helps Claude tell speakers on a shared mic apart. */
+    description: z.string().min(1).optional(),
   })
   .strict();
 
-const dndbeyondId = z.number().int().positive();
+const campaign = z
+  .object({
+    name: z.string().min(1),
+    /** Background for this campaign, added to the prompts after summary.context. */
+    context: z.string().optional(),
+    /** The campaign's D&D Beyond ID, from its URL. */
+    dndbeyond: dndbeyondId.optional(),
+    /** Voice channels where a recording belongs to this campaign unless another one is picked. */
+    channels: z.array(snowflake).default([]),
+  })
+  .strict();
 
-/** A character as the app's roster writes it; a plain "Name — description" string also works. */
-const characterEntry = z
+const character = z
   .object({
     name: z.string().min(1),
     /** e.g. "dwarf fighter 5": a hint for Claude, shown next to the name. */
     description: z.string().min(1).optional(),
     /** The character's D&D Beyond ID, from its sheet's URL. */
     dndbeyond: dndbeyondId.optional(),
+    /** The campaign they're in (an ID under `campaigns`). */
+    campaign: rosterKey.optional(),
+    /** Who plays them (an ID under `speakers`). */
+    speaker: rosterKey.optional(),
   })
   .strict();
 
-const campaign = z
-  .object({
-    name: z.string().min(1).optional(),
-    /** Background for this campaign, added to the prompts after summary.context. */
-    context: z.string().optional(),
-    /** The campaign's D&D Beyond ID, from its URL. */
-    dndbeyond: dndbeyondId.optional(),
-    /**
-     * Discord user ID → the character they play: `{ name, description?, dndbeyond? }`, or a string
-     * like "Thorin — dwarf fighter" (or "DM"), where the text before " — " is the name.
-     */
-    characters: z.record(snowflake, z.union([z.string().min(1), characterEntry])).default({}),
-    /** People who talk at the table but don't play; never asked about as unpaired. */
-    guests: z.array(snowflake).default([]),
-  })
-  .strict();
-
-export const configSchema = z
+/** The settings without reading older files (use configSchema to parse). */
+export const configObject = z
   .object({
     recording: z
       .object({
@@ -66,14 +71,14 @@ export const configSchema = z
       .strict()
       .prefault({}),
 
-    /**
-     * Discord user ID → name to use in transcripts (falls back to the Discord display name), or an
-     * object for an account several people share: `{ name, disambiguate: [identities…] }`.
-     */
-    speakers: z.record(snowflake, z.union([z.string().min(1), sharedSpeaker])).default({}),
+    /** Who talks in sessions, and on which Discord accounts. */
+    speakers: z.record(rosterKey, speaker).default({}),
 
-    /** Voice channel ID → the campaign played there: its playable characters and background. */
-    campaigns: z.record(snowflake, campaign).default({}),
+    /** The campaigns you run. */
+    campaigns: z.record(rosterKey, campaign).default({}),
+
+    /** Player characters, each in a campaign and played by a speaker. */
+    characters: z.record(rosterKey, character).default({}),
 
     sessions: z
       .object({
@@ -198,7 +203,24 @@ export const configSchema = z
       .strict()
       .prefault({}),
   })
-  .strict();
+  .strict()
+  .superRefine((c, ctx) => {
+    for (const [id, ch] of Object.entries(c.characters)) {
+      if (ch.campaign && !c.campaigns[ch.campaign]) ctx.addIssue({ code: 'custom', path: ['characters', id, 'campaign'], message: `no campaign "${ch.campaign}"` });
+      if (ch.speaker && !c.speakers[ch.speaker]) ctx.addIssue({ code: 'custom', path: ['characters', id, 'speaker'], message: `no speaker "${ch.speaker}"` });
+    }
+    const owner = new Map<string, string>();
+    for (const [id, k] of Object.entries(c.campaigns)) {
+      for (const channel of k.channels) {
+        const other = owner.get(channel);
+        if (other) ctx.addIssue({ code: 'custom', path: ['campaigns', id, 'channels'], message: `channel ${channel} is already the default for "${c.campaigns[other]!.name}"` });
+        owner.set(channel, id);
+      }
+    }
+  });
+
+/** config.yaml: older files (speakers keyed by Discord ID, campaigns by voice channel) are read in the new shape. */
+export const configSchema = z.preprocess(migrateRoster, configObject);
 
 export type Config = z.infer<typeof configSchema>;
 
@@ -213,37 +235,4 @@ export function explainKeyErrors(error: z.ZodError): z.ZodError {
     (issue as { message: string }).message = `"${key}" ${issue.issues[0]?.message ?? 'is not a valid key'}`; // issues are plain objects; the type is read-only
   }
   return error;
-}
-
-export interface Identity {
-  /** Short label used in transcripts, e.g. "DM". */
-  label: string;
-  /** The full hint as written in the config. */
-  description: string;
-}
-
-/** Splits "DM — narrates the world" into a label ("DM") and the full description. */
-export function parseIdentity(text: string): Identity {
-  const m = /^(.+?)\s+[—–-]\s+|^(.+?):\s*/.exec(text);
-  const label = (m?.[1] ?? m?.[2] ?? text).trim();
-  return { label, description: text.trim() };
-}
-
-/** userId → transcript name, for every configured speaker that has one. */
-export function speakerNames(config: Pick<Config, 'speakers'>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [id, v] of Object.entries(config.speakers)) {
-    const name = typeof v === 'string' ? v : v.name;
-    if (name) out[id] = name;
-  }
-  return out;
-}
-
-/** userId → identities, for accounts configured with `disambiguate`. */
-export function sharedAccounts(config: Pick<Config, 'speakers'>): Map<string, Identity[]> {
-  const out = new Map<string, Identity[]>();
-  for (const [id, v] of Object.entries(config.speakers)) {
-    if (typeof v !== 'string' && v.disambiguate) out.set(id, v.disambiguate.map(parseIdentity));
-  }
-  return out;
 }

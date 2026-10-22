@@ -35,7 +35,11 @@ function setup(transcriber: Transcriber) {
   const dir = mkdtempSync(join(tmpdir(), 'live-'));
   writeJson(paths.session(dir), { id: 's1', startedAt: T0, channelId: CHANNEL, channelName: 'game-night' });
   writeJson(paths.participants(dir), { [SAM]: { displayName: 'Sam' }, [REES]: { displayName: 'Rees' } });
-  const config = configSchema.parse({ campaigns: { [CHANNEL]: { characters: { [SAM]: 'Thorin — dwarf fighter' } } } });
+  const config = configSchema.parse({
+    speakers: { sam: { name: 'Sam', discord: [SAM] } },
+    campaigns: { game: { name: 'Game', channels: [CHANNEL] } },
+    characters: { thorin: { name: 'Thorin', description: 'dwarf fighter', campaign: 'game', speaker: 'sam' } },
+  });
   const rendered: BatchPlan[] = [];
   const live = new LiveTranscriber({
     sessionDir: dir,

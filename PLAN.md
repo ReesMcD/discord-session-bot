@@ -1,4 +1,4 @@
-# discord-session-bot — Plan
+# Scrying Eye — Plan
 
 Self-hosted Discord bot: `/record` → per-speaker recording → timestamped transcript.
 Later phases add the AI session recap and pluggable publishing.

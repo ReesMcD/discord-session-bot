@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, subscribe } from '../api';
 import { hms, speakerHue } from '../format';
 import { href } from '../router';
-import type { BotStatus, GuildInfo, RecordingStatus } from '../types';
+import { campaignFor, campaignForChannel, charactersByAccount } from '../../../src/config/roster';
+import type { BotStatus, Config, ConfigState, GuildInfo, RecordingStatus, SessionSummary } from '../types';
 import { Badge, Empty } from '../ui';
 import { LiveTranscript } from './LiveTranscript';
 
@@ -15,11 +16,15 @@ export function RecordPage() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [lastStopped, setLastStopped] = useState('');
+  const [config, setConfig] = useState<Config | null>(null);
+  /** The campaign picked for the next recording; '' = each channel's usual one. */
+  const [campaign, setCampaign] = useState('');
 
   const loadGuilds = () => api<GuildInfo[]>('/bot/guilds').then(setGuilds, () => {});
   useEffect(() => {
     api<BotStatus>('/bot').then(setStatus, (e: Error) => setError(e.message));
     void loadGuilds();
+    api<ConfigState>('/config').then((c) => setConfig(c.config), () => {});
     return subscribe({
       onBot: (s) => {
         setStatus(s);
@@ -32,7 +37,7 @@ export function RecordPage() {
     setBusy(channelId);
     setError('');
     try {
-      await api<RecordingStatus>('/bot/join', { method: 'POST', json: { channelId } });
+      await api<RecordingStatus>('/bot/join', { method: 'POST', json: { channelId, ...(campaign ? { campaign } : {}) } });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -63,11 +68,25 @@ export function RecordPage() {
       {error && <div className="error-box">{error}</div>}
       {lastStopped && !rec && (
         <div className="card">
-          Saved as <a href={href('sessions', lastStopped)}>{lastStopped}</a>. It'll be transcribed automatically (Settings → Recording & people → after stopping).
+          Saved as <a href={href('sessions', lastStopped)}>{lastStopped}</a>. It'll be transcribed automatically (Settings → Recording → after stopping).
         </div>
       )}
-      {rec ? <Recording rec={rec} onStop={stop} stopping={busy === 'stop'} /> : status.state === 'ready' && (
+      {rec ? <Recording rec={rec} config={config} onStop={stop} stopping={busy === 'stop'} /> : status.state === 'ready' && (
         <>
+          {config && Object.keys(config.campaigns).length > 0 && (
+            <label className="field">
+              <span className="field-label">Campaign</span>
+              <select value={campaign} onChange={(e) => setCampaign(e.target.value)}>
+                <option value="">Each channel’s usual campaign (or none)</option>
+                {Object.entries(config.campaigns).map(([id, k]) => (
+                  <option key={id} value={id}>
+                    {k.name}
+                  </option>
+                ))}
+              </select>
+              <span className="field-hint">You can change it afterwards on the session’s page.</span>
+            </label>
+          )}
           {guilds.length > 1 && (
             <select value={guild?.id ?? ''} onChange={(e) => setGuildId(e.target.value)} style={{ marginBottom: 12 }}>
               {guilds.map((g) => (
@@ -88,7 +107,10 @@ export function RecordPage() {
                       <strong className="row" style={{ gap: 6 }}>
                         <SpeakerIcon /> {c.name}
                       </strong>
-                      <div className="muted small">{c.members.length ? c.members.map((m) => m.name + (m.bot ? ' (bot)' : '')).join(', ') : 'Nobody here'}</div>
+                      <div className="muted small">{c.members.length ? c.members.map((m) => whoIs(config, campaign || campaignForChannel(config ?? EMPTY, c.id), m)).join(', ') : 'Nobody here'}</div>
+                      {config && (campaign || campaignForChannel(config, c.id)) && (
+                        <div className="muted small">Campaign: {config.campaigns[campaign || campaignForChannel(config, c.id)!]?.name}</div>
+                      )}
                     </div>
                     <button className={c.members.length ? 'primary' : ''} disabled={!!busy} onClick={() => join(c.id)}>
                       {busy === c.id ? 'Joining…' : 'Join & record'}
@@ -100,6 +122,20 @@ export function RecordPage() {
       )}
     </div>
   );
+}
+
+const EMPTY = { speakers: {}, campaigns: {}, characters: {} };
+
+/** "Sam as Thorin", "Rees", or the Discord name with a note when no speaker is linked to the account. */
+function whoIs(config: Config | null, campaignId: string | undefined, m: { id: string; name: string; bot: boolean }): string {
+  if (m.bot) return `${m.name} (bot)`;
+  if (!config) return m.name;
+  const speakers = Object.values(config.speakers).filter((s) => s.discord.includes(m.id));
+  if (!speakers.length) return `${m.name} (not a speaker yet)`;
+  if (speakers.length > 1) return `${speakers.map((s) => s.name).join(' / ')} (shared mic)`;
+  const campaign = campaignFor(config, { campaign: campaignId });
+  const character = campaign ? charactersByAccount(config, campaign)[m.id] : undefined;
+  return character ? `${speakers[0]!.name} as ${character}` : speakers[0]!.name;
 }
 
 function SpeakerIcon() {
@@ -153,7 +189,7 @@ function BotBanner({ status }: { status: BotStatus }) {
   );
 }
 
-function Recording({ rec, onStop, stopping }: { rec: RecordingStatus; onStop: () => void; stopping: boolean }) {
+function Recording({ rec, config, onStop, stopping }: { rec: RecordingStatus; config: Config | null; onStop: () => void; stopping: boolean }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -180,6 +216,8 @@ function Recording({ rec, onStop, stopping }: { rec: RecordingStatus; onStop: ()
           </span>
         </div>
       </section>
+
+      {config && Object.keys(config.campaigns).length > 0 && <RecordingCampaign sessionId={rec.sessionId} config={config} />}
 
       <section className="card">
         <h2 className="eyebrow" style={{ margin: '0 0 6px' }}>At the table</h2>
@@ -214,5 +252,37 @@ function Recording({ rec, onStop, stopping }: { rec: RecordingStatus; onStop: ()
 
       {rec.live && <LiveTranscript sessionId={rec.sessionId} />}
     </div>
+  );
+}
+
+/** The campaign of the recording in progress, changeable while it records. */
+function RecordingCampaign({ sessionId, config }: { sessionId: string; config: Config }) {
+  const [current, setCurrent] = useState<SessionSummary['campaign'] | undefined>(undefined);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api<SessionSummary>(`/sessions/${encodeURIComponent(sessionId)}`).then((s) => setCurrent(s.campaign), () => {});
+  }, [sessionId]);
+  const pick = async (campaign: string) => {
+    setError('');
+    try {
+      setCurrent((await api<SessionSummary>(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PATCH', json: { campaign: campaign || null } })).campaign);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  if (current === undefined) return null;
+  return (
+    <label className="field">
+      <span className="field-label">Campaign</span>
+      <select value={current?.picked ? current.key : ''} onChange={(e) => void pick(e.target.value)}>
+        <option value="">{current && !current.picked ? `${current.name} (the channel’s usual)` : 'None'}</option>
+        {Object.entries(config.campaigns).map(([id, k]) => (
+          <option key={id} value={id}>
+            {k.name}
+          </option>
+        ))}
+      </select>
+      {error && <span className="field-error">{error}</span>}
+    </label>
   );
 }

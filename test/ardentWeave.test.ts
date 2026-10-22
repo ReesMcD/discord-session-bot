@@ -42,7 +42,7 @@ function session(recap = RECAP, transcript = '[00:00:01] Aria: We go to the inn.
   writeFileSync(paths.transcript(dir), transcript);
   writeFileSync(join(dir, 'summary.md'), recap);
   const config = configSchema.parse({
-    campaigns: { [CHANNEL]: campaignName ? { name: campaignName } : {} },
+    campaigns: campaignName ? { tide: { name: campaignName, channels: [CHANNEL] } } : {},
     transcript: { timezone: 'UTC' },
     upload: { url: 'https://wiki.example/api/sessions', format: 'ardent-weave' },
   });
@@ -80,9 +80,9 @@ test('a transcript too big for the wiki is left out and the recap still goes', (
   assert.match(logs.join('\n'), /transcript is left out/);
 });
 
-test('a session whose channel has no campaign name says how to fix it', () => {
+test('a session without a campaign says how to fix it', () => {
   const { dir, config } = session(RECAP, '', null);
-  assert.throws(() => toWikiSession(dir, config, { id: 's1', date: '2026-10-24', markdown: RECAP }), /no campaign name.*Settings → Campaigns/);
+  assert.throws(() => toWikiSession(dir, config, { id: 's1', date: '2026-10-24', markdown: RECAP }), /no campaign\. Pick one on the session's page/);
 });
 
 /** A local stand-in that answers like the wiki: JSON errors as {"error": …}. */
@@ -115,7 +115,7 @@ test('uploading in the wiki format: a bearer key always, the page link from its 
     assert.equal(wiki.seen[0]!.auth, `Bearer ${'k'.repeat(32)}`);
     assert.equal(status.url, 'https://dm.example/S1');
 
-    config.campaigns[CHANNEL]!.name = 'Crimson Tyde';
+    config.campaigns['tide']!.name = 'Crimson Tyde';
     await assert.rejects(uploadRecap(dir, config, 'k', { sleep: async () => {} }), /400 Bad Request \(No campaign named "Crimson Tyde"\.\)/);
   } finally {
     wiki.close();

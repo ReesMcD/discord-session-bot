@@ -7,7 +7,7 @@ import { createApi } from '../src/app/api.js';
 import { ConfigStore } from '../src/app/configStore.js';
 import { JobRunner } from '../src/app/jobs.js';
 import { emptyTrash, trashSession } from '../src/app/sessions.js';
-import { campaignFor } from '../src/config/campaign.js';
+import { campaignFor } from '../src/config/roster.js';
 import { configSchema } from '../src/config/schema.js';
 import { paths, writeJson } from '../src/session/layout.js';
 import { sessionTitle } from '../src/session/title.js';
@@ -17,7 +17,7 @@ const TIDE = '111111111111111111';
 const ONESHOT = '222222222222222222';
 const T0 = Date.UTC(2026, 9, 22, 23, 5);
 const config = (extra: object = {}) =>
-  configSchema.parse({ transcript: { timezone: 'UTC' }, campaigns: { [TIDE]: { name: 'Crimson Tide' }, [ONESHOT]: { name: 'One-shot' } }, ...extra });
+  configSchema.parse({ transcript: { timezone: 'UTC' }, campaigns: { tide: { name: 'Crimson Tide', channels: [TIDE] }, oneshot: { name: 'One-shot', channels: [ONESHOT] } }, ...extra });
 
 test('names: campaign and date by default, #channel without a campaign, a hand-given name wins', () => {
   const c = config();
@@ -32,9 +32,9 @@ test('names: campaign and date by default, #channel without a campaign, a hand-g
 test('a campaign picked after the fact wins over the voice channel', () => {
   const c = config();
   assert.equal(campaignFor(c, { channelId: TIDE })!.name, 'Crimson Tide');
-  assert.equal(campaignFor(c, { channelId: TIDE, campaign: ONESHOT })!.name, 'One-shot');
+  assert.equal(campaignFor(c, { channelId: TIDE, campaign: 'oneshot' })!.name, 'One-shot');
   assert.equal(campaignFor(c, { channelId: TIDE, campaign: 'gone' })!.name, 'Crimson Tide', 'a removed campaign falls back to the channel');
-  assert.equal(sessionTitle({ id: 's', startedAt: T0, channelId: TIDE, campaign: ONESHOT }, c), 'One-shot — Oct 22, 2026');
+  assert.equal(sessionTitle({ id: 's', startedAt: T0, channelId: TIDE, campaign: 'oneshot' }, c), 'One-shot — Oct 22, 2026');
 });
 
 function app(opts: { recording?: string } = {}) {
@@ -57,12 +57,12 @@ function app(opts: { recording?: string } = {}) {
 test('rename a session and pick its campaign afterwards; null puts either back', async () => {
   const { dir, call, ran } = app();
   const list = (await (await call('GET', '/sessions')).json()) as SessionSummary[];
-  assert.deepEqual([list[0]!.title, list[0]!.customTitle, list[0]!.campaign], ['Crimson Tide — Oct 22, 2026', false, { key: TIDE, name: 'Crimson Tide', picked: false }]);
+  assert.deepEqual([list[0]!.title, list[0]!.customTitle, list[0]!.campaign], ['Crimson Tide — Oct 22, 2026', false, { key: 'crimson-tide', name: 'Crimson Tide', picked: false }]);
 
   let d = (await (await call('PATCH', '/sessions/s1', { title: 'The Siege' })).json()) as SessionDetail;
   assert.deepEqual([d.title, d.customTitle], ['The Siege', true]);
-  d = (await (await call('PATCH', '/sessions/s1', { campaign: ONESHOT, title: null })).json()) as SessionDetail;
-  assert.deepEqual([d.title, d.campaign], ['One-shot — Oct 22, 2026', { key: ONESHOT, name: 'One-shot', picked: true }]);
+  d = (await (await call('PATCH', '/sessions/s1', { campaign: 'one-shot', title: null })).json()) as SessionDetail;
+  assert.deepEqual([d.title, d.campaign], ['One-shot — Oct 22, 2026', { key: 'one-shot', name: 'One-shot', picked: true }]);
   assert.deepEqual(ran, [], 'no transcript yet: nothing to rebuild');
 
   mkdirSync(paths.transcriptsDir(dir), { recursive: true });

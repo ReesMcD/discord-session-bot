@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, DiscordAPIError, EmbedBuilder, Events, GatewayIntentBits, MessageFlags, type AutocompleteInteraction, type ChatInputCommandInteraction, type Guild, type VoiceBasedChannel } from 'discord.js';
+import { campaignForChannel } from '../config/roster.js';
 import { COMMANDS, inviteUrl, runCommand, type CommandName } from './commands.js';
 import { encounterChoices, runEncounterCommand, type EncounterCommandDeps, type EncounterPost } from './encounterCommand.js';
 import { loadConfig } from '../config/load.js';
@@ -125,6 +126,7 @@ export class BotService extends EventEmitter implements BotControl {
     client.on(Events.InteractionCreate, (i) => {
       if (i.isChatInputCommand()) void (i.commandName === 'encounter' ? this.answerEncounter(i) : this.answer(i));
       else if (i.isAutocomplete() && i.commandName === 'encounter') void this.suggestEncounters(i);
+      else if (i.isAutocomplete() && i.commandName === 'record') void this.suggestCampaigns(i);
     });
     client.on(Events.VoiceStateUpdate, () => this.emitStatus());
     client.on(Events.Error, (err) => this.log(`discord error: ${err.message}`));
@@ -160,10 +162,11 @@ export class BotService extends EventEmitter implements BotControl {
     try {
       await i.deferReply({ flags: MessageFlags.Ephemeral });
       const channelId = i.options.getChannel('channel')?.id;
+      const campaign = i.commandName === 'record' ? (i.options.getString('campaign') ?? undefined) : undefined;
       const memberVoiceChannelId = i.guild?.voiceStates.cache.get(i.user.id)?.channelId ?? undefined;
       const afterStop = this.configStore?.read().config?.recording.after_stop;
       const reply = await runCommand(
-        { name: i.commandName as CommandName, guildId: i.guildId, ...(channelId ? { channelId } : {}), ...(memberVoiceChannelId ? { memberVoiceChannelId } : {}), ...(afterStop ? { afterStop } : {}) },
+        { name: i.commandName as CommandName, guildId: i.guildId, ...(channelId ? { channelId } : {}), ...(campaign ? { campaign } : {}), ...(memberVoiceChannelId ? { memberVoiceChannelId } : {}), ...(afterStop ? { afterStop } : {}) },
         this,
       );
       this.log(`/${i.commandName} by ${i.user.tag}`);
@@ -207,6 +210,15 @@ export class BotService extends EventEmitter implements BotControl {
       this.log(`/encounter suggestions: ${(err as Error).message}`);
       await i.respond([]).catch(() => {});
     }
+  }
+
+  /** /record campaign: the campaigns whose name matches what's typed so far. */
+  private async suggestCampaigns(i: AutocompleteInteraction): Promise<void> {
+    const typed = String(i.options.getFocused()).toLowerCase();
+    const campaigns = Object.entries(this.configStore?.read().config?.campaigns ?? {});
+    await i
+      .respond(campaigns.filter(([, c]) => c.name.toLowerCase().includes(typed)).slice(0, 25).map(([id, c]) => ({ name: c.name.slice(0, 100), value: id })))
+      .catch(() => {});
   }
 
   /** Posts an embed, with a Join button when there's a link. */
@@ -268,13 +280,15 @@ export class BotService extends EventEmitter implements BotControl {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async join(channelId: string): Promise<RecordingStatus> {
+  async join(channelId: string, opts: { campaign?: string } = {}): Promise<RecordingStatus> {
     if (!this.client || this.state !== 'ready') throw new Error('The bot is not connected to Discord');
     if (this.recorder) throw new Error(`Already recording #${this.recorder.status().channelName}; stop that first`);
     const channel = await this.client.channels.fetch(channelId).catch(() => null);
     if (!channel?.isVoiceBased()) throw new Error('That voice channel is not visible to the bot');
 
     const { config } = loadConfig(this.opts.configPath);
+    if (opts.campaign && !config.campaigns[opts.campaign]) throw new Error('No such campaign');
+    const campaign = opts.campaign ?? campaignForChannel(config, channelId);
     const sessionsRoot = join(this.opts.dataDir, 'sessions');
     const sessionId = sessionIdFor(Date.now(), channel.name, config.transcript.timezone, (id) => existsSync(join(sessionsRoot, id)));
     const recorder = new SessionRecorder({
@@ -284,6 +298,7 @@ export class BotService extends EventEmitter implements BotControl {
       channel,
       filter: { ignoreUserIds: new Set(config.recording.ignore_users), ignoreBots: config.recording.ignore_bots, selfId: this.client.user!.id },
       silenceMs: config.recording.silence_ms,
+      ...(campaign ? { campaign } : {}),
       selfMute: false,
       log: this.log,
     });

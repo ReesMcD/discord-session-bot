@@ -64,17 +64,17 @@ export class ConfigStore {
   }
 }
 
-/** The defaults of each entry in a map keyed by ID (e.g. a campaign's `guests: []`). */
+/** The defaults of each entry in a map keyed by ID (e.g. a campaign's `channels: []`). */
 class EntryDefaults {
   constructor(readonly entry: unknown) {}
 }
 
-const SAMPLE_ID = '100000000000000000';
-
 /** Every setting at its default, to tell which values the user actually chose. */
 const DEFAULTS: Record<string, unknown> = {
   ...(configSchema.parse({}) as unknown as Record<string, unknown>),
-  campaigns: new EntryDefaults(configSchema.parse({ campaigns: { [SAMPLE_ID]: {} } }).campaigns[SAMPLE_ID]),
+  speakers: new EntryDefaults({ discord: [] }),
+  campaigns: new EntryDefaults({ channels: [] }),
+  characters: new EntryDefaults({}),
 };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

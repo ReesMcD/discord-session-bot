@@ -1,9 +1,9 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sharedAccounts, type Config } from '../config/schema.js';
+import type { Config } from '../config/schema.js';
 import { paths, readJson, writeJson, type SessionInfo } from '../session/layout.js';
 import { formatOffset, renderMarkdown, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor, unpairedSpeakers } from '../config/campaign.js';
+import { campaignFor, sharedAccounts, unpairedSpeakers } from '../config/roster.js';
 import { chunkTranscript, formatChunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { cleanTranscript, type CleanupResult } from './cleanup.js';
@@ -119,7 +119,7 @@ export async function summarizeSession(sessionDir: string, config: Config, confi
   // Who isn't on the roster yet, with the clean-up's guesses; "Ignore" from an earlier run is kept.
   const campaign = campaignFor(config, session);
   const dismissed = new Set((readJson<UnpairedSpeaker[]>(summaryPaths.unpaired(sessionDir)) ?? []).filter((u) => u.dismissed).map((u) => u.userId));
-  const unpaired = (cleanup?.unpaired ?? unpairedSpeakers(campaign, lines)).map((u) => (dismissed.has(u.userId) ? { ...u, dismissed: true } : u));
+  const unpaired = (cleanup?.unpaired ?? unpairedSpeakers(config, lines)).map((u) => (dismissed.has(u.userId) ? { ...u, dismissed: true } : u));
   writeJson(summaryPaths.unpaired(sessionDir), unpaired);
 
   // 3. Extract notes per chunk.

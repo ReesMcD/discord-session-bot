@@ -12,31 +12,40 @@ recording:
   # Delete local audio this many days after a session is processed (0 = keep forever).
   audio_retention_days: 30
 
-# Names to use in transcripts. Anyone not listed uses their Discord display name.
-speakers: {}
-#  "123456789012345678": Rees
-#  "223456789012345678": Sam
-#
-#  An account several people share (or one person voicing several roles): list who talks on it and
-#  Claude labels each line before writing the recap. The text before " — " is the name used in transcripts.
-#  "323456789012345678":
-#    name: Rees
-#    disambiguate:
-#      - "DM — narrates the world and voices NPCs"
-#      - "Hamqueef — a player character"
+# Speakers, campaigns and characters are set up separately and point at each other. Easiest from
+# the app: Settings → Speakers, Campaigns and Characters. IDs (rees, strahd, thorin) are yours to pick.
+# Files from before 0.5 (everything keyed by Discord ID and voice channel) are read in this shape.
 
-# Campaigns, by the voice channel they're played in: who plays which character, so transcripts show
-# character names and the recap can tell the party from NPCs. Easiest to fill in from the app
-# (Settings → Campaigns). Real names come from speakers above. Craig imports use the only campaign.
+# Who talks in sessions, named as they should appear in transcripts, and the Discord accounts they
+# talk on. Anyone not listed uses their Discord display name. Link an account to two speakers when
+# they share a mic (or one sometimes plays from the other's): Claude labels each line on it.
+speakers: {}
+#  rees:
+#    name: Rees
+#    discord: ["123456789012345678"]
+#    description: DM, narrates the world and voices NPCs   # a hint for Claude on a shared mic
+#  sam:
+#    name: Sam
+#    discord: ["223456789012345678", "123456789012345678"]  # sometimes on Rees's mic
+
+# The campaigns you run. Pick one when recording (or later on the session's page); a usual voice
+# channel makes it the default there. Craig imports use the only campaign.
 campaigns: {}
-#  "345678901234567890":            # voice channel ID
-#    name: Curse of Strahd           # the recap's title
+#  strahd:
+#    name: Curse of Strahd            # the recap's title (and the wiki's campaign)
 #    context: Gothic horror in Barovia. The party is level 5.
-#    dndbeyond: 4567890              # optional: the D&D Beyond campaign ID (from its URL)
-#    characters:                     # Discord user ID → their character
-#      "123456789012345678": { name: DM }
-#      "223456789012345678": { name: Thorin, description: dwarf fighter 5, dndbeyond: 98765432 }
-#    guests: []                      # people who talk at the table but don't play"
+#    dndbeyond: 4567890               # optional: the D&D Beyond campaign ID (from its URL)
+#    channels: ["345678901234567890"] # optional: usual voice channels
+
+# Player characters, each in a campaign and played by a speaker: transcripts show character names
+# and the recap tells the party from NPCs.
+characters: {}
+#  thorin:
+#    name: Thorin
+#    description: dwarf fighter 5
+#    dndbeyond: 98765432              # optional: the sheet's ID (from its URL)
+#    campaign: strahd
+#    speaker: sam
 
 transcription:
   provider: groq              # groq | openai (key in .env: GROQ_API_KEY / OPENAI_API_KEY / TRANSCRIBE_API_KEY)

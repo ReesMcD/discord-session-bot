@@ -11,7 +11,7 @@ import { createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
-export const REPO = 'ReesMcD/discord-session-bot';
+export const REPO = 'ReesMcD/scrying-eye';
 
 /** What Contents/Resources holds that the small update replaces (electron-builder.yml decides it). */
 /** The app's bundle name (productName in electron-builder.yml). */

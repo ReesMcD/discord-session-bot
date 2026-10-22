@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import type { Config } from '../config/schema.js';
 import type { SessionInfo } from '../session/layout.js';
 import { formatOffset, type TranscriptLine } from '../transcript/merge.js';
-import { campaignFor, unpairedSpeakers } from '../config/campaign.js';
+import { campaignFor, unpairedSpeakers } from '../config/roster.js';
 import { chunkTranscript, formatLine, type Chunk } from './chunk.js';
 import { runChunkPass } from './chunkPass.js';
 import { auditCleanup, type CleanupAuditReport, type Proposal } from './cleanupAudit.js';
@@ -85,7 +85,7 @@ export async function cleanTranscript(
   const log = opts.log ?? console.log;
   const s = config.summary;
   const template = loadTemplate('cleanup', s.prompts_dir);
-  const unpaired = unpairedSpeakers(campaignFor(config, session), lines);
+  const unpaired = unpairedSpeakers(config, lines);
   const system = render(template.text, { context: contextBlock(session, lines, config), vocabulary: vocabulary(config, session), unpaired: unpairedBlock(unpaired) });
   const ids = new Map<TranscriptLine, number>();
   lines.forEach((l, i) => ids.set(l, i + 1));

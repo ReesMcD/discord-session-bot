@@ -28,7 +28,8 @@ export type {
   MusicSound,
   MusicStatus,
   MusicTab,
-  Person,
+  DiscordAccount,
+  DndBeyondCharacter,
   PromptInfo,
   RecordingStatus,
   SessionSummary,
@@ -44,8 +45,6 @@ export type LiveSnapshot = import('../../src/shared/types').LiveTranscript & { s
 /** A session as GET /sessions/:id returns it, with its jobs. */
 export type SessionDetail = SessionDetailWithJobs;
 export type Effort = Config['summary']['extract_effort'];
-export type SharedSpeaker = Exclude<Config['speakers'][string], string>;
-export type Campaign = Config['campaigns'][string];
 
 /** Present only inside the Mac app (see electron/preload.cts). */
 export interface DesktopBridge {

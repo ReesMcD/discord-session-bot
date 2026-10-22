@@ -103,16 +103,29 @@ export interface UploadTestResult {
 /** GET /sessions/:id also lists the session's jobs. */
 export type SessionDetailWithJobs = SessionDetail & { jobs: Job[] };
 
-export interface Person {
+/** A Discord account the app knows: seen in a recording, or in a voice channel or the server right now. */
+export interface DiscordAccount {
   id: string;
+  /** Display names and usernames it has had. */
   names: string[];
+  /** Recorded sessions it spoke in. */
   sessions: number;
   lastSeen: number;
+  bot?: boolean;
+}
+
+/** A public D&D Beyond character, and the campaign it's in (for adding the rest of the party). */
+export interface DndBeyondCharacter {
+  id: number;
+  name: string;
+  /** e.g. "Hill Dwarf Fighter 5". */
+  description?: string;
+  campaign?: { id: number; name: string; characters: Array<{ id: number; name: string; player?: string }> };
 }
 
 /**
- * Someone who spoke in a campaign session without being on its roster (or its guests). The guess
- * comes from the clean-up pass when it ran.
+ * A Discord account that spoke in a session with no speaker linked to it. The guess comes from the
+ * clean-up pass when it ran.
  */
 export interface UnpairedSpeaker {
   userId: string;

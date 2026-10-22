@@ -2,17 +2,17 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { join } from 'node:path';
 import { listUtterances, paths, readJson, readParticipants, readSessionInfo, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import { sessionTitle } from '../session/title.js';
-import { campaignFor } from '../config/campaign.js';
+import { campaignFor } from '../config/roster.js';
 import { configSchema } from '../config/schema.js';
 import type { TranscriptLine } from '../transcript/merge.js';
 import { readEditState, recapState, type RecapState } from '../summary/recapEdits.js';
 import { uploadStatus } from '../upload/recapUpload.js';
 import { summaryPaths, type SummaryMeta } from '../summary/summarizeSession.js';
-import type { Person, SessionDetail, SessionSummary } from '../shared/types.js';
+import type { DiscordAccount, GuildInfo, SessionDetail, SessionSummary } from '../shared/types.js';
 import type { Config } from '../config/schema.js';
 import { pendingUnpaired } from './unpaired.js';
 
-export type { Person, SessionDetail, SessionSummary };
+export type { DiscordAccount, SessionDetail, SessionSummary };
 
 const SESSION_ID = /^[\w.-]+$/;
 
@@ -50,7 +50,7 @@ export function describeSession(dataDir: string, id: string, config: Config | nu
     id,
     title: sessionTitle(info, cfg),
     customTitle: !!info.title?.trim(),
-    campaign: campaign ? { key: campaign.channelId, name: campaign.name ?? null, picked: !!info.campaign && info.campaign === campaign.channelId } : null,
+    campaign: campaign ? { key: campaign.id, name: campaign.name, picked: !!info.campaign } : null,
     startedAt: info.startedAt,
     ...(info.stoppedAt ? { stoppedAt: info.stoppedAt } : {}),
     ...(info.channelName ? { channelName: info.channelName } : {}),
@@ -100,7 +100,7 @@ export function sessionDetail(dataDir: string, id: string, config: Config | null
 
 /**
  * Renames a session or picks its campaign, after the fact. null puts either back: the name to the
- * sessions.title template, the campaign to the voice channel's. The folder (and id) never change.
+ * sessions.title template, the campaign to the voice channel's default. The folder (and id) never change.
  */
 export function updateSession(dir: string, change: { title?: string | null; campaign?: string | null }, config: Config | null): void {
   const info = readSessionInfo(dir);
@@ -144,23 +144,27 @@ export function emptyTrash(dataDir: string, now = Date.now()): string[] {
 }
 
 /** Everyone seen in any session (from participants.json), for picking people by name in Settings. */
-export function knownPeople(dataDir: string): Person[] {
+export function knownAccounts(dataDir: string, guilds: readonly GuildInfo[] = []): DiscordAccount[] {
   const root = sessionsRoot(dataDir);
-  if (!existsSync(root)) return [];
-  const people = new Map<string, Person>();
+  const accounts = new Map<string, DiscordAccount>();
+  // Whoever is in a voice channel right now, so a new player can be linked before they've been recorded.
+  for (const m of guilds.flatMap((g) => g.channels.flatMap((c) => c.members))) {
+    if (!accounts.has(m.id)) accounts.set(m.id, { id: m.id, names: [m.name], sessions: 0, lastSeen: Date.now(), ...(m.bot ? { bot: true } : {}) });
+  }
+  if (!existsSync(root)) return [...accounts.values()];
   for (const id of readdirSync(root)) {
     const dir = sessionDirFor(dataDir, id);
     if (!dir) continue;
     const started = readSessionInfo(dir).startedAt;
     for (const [userId, p] of Object.entries(readParticipants(dir))) {
-      const person = people.get(userId) ?? { id: userId, names: [], sessions: 0, lastSeen: 0 };
-      for (const n of [p.displayName, p.username]) if (n && !person.names.includes(n)) person.names.push(n);
-      person.sessions++;
-      person.lastSeen = Math.max(person.lastSeen, started);
-      people.set(userId, person);
+      const account = accounts.get(userId) ?? { id: userId, names: [], sessions: 0, lastSeen: 0 };
+      for (const n of [p.displayName, p.username]) if (n && !account.names.includes(n)) account.names.push(n);
+      account.sessions++;
+      account.lastSeen = Math.max(account.lastSeen, started);
+      accounts.set(userId, account);
     }
   }
-  return [...people.values()].sort((a, b) => b.lastSeen - a.lastSeen);
+  return [...accounts.values()].sort((a, b) => b.lastSeen - a.lastSeen);
 }
 
 /** Downloadable text outputs of a session. */

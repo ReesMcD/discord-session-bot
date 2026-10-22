@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { EndBehaviorType, VoiceConnectionStatus, entersState, joinVoiceChannel, type AudioPlayer, type VoiceConnection } from '@discordjs/voice';
 import type { Guild, VoiceBasedChannel } from 'discord.js';
-import { paths, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
+import { paths, readJson, writeJson, type Participant, type SessionInfo } from '../session/layout.js';
 import type { RecordingStatus } from '../bot/types.js';
 import { skipReason, type RecordFilterConfig } from './filters.js';
 import { ReconnectBudget } from './reconnect.js';
@@ -21,6 +21,8 @@ export interface SessionRecorderOptions {
   debug?: (msg: string) => void;
   /** Written to session.json; "bot" sessions are recovered by the app after a crash. */
   source?: string;
+  /** The campaign picked for this recording (an ID under `campaigns`). */
+  campaign?: string;
   /** Join muted (default). The app's bot joins unmuted so it can also play music. */
   selfMute?: boolean;
 }
@@ -64,6 +66,7 @@ export class SessionRecorder extends EventEmitter {
       channelId: opts.channel.id,
       channelName: opts.channel.name,
       source: opts.source ?? 'bot',
+      ...(opts.campaign ? { campaign: opts.campaign } : {}),
     };
   }
 
@@ -120,7 +123,11 @@ export class SessionRecorder extends EventEmitter {
     await Promise.all(this.active.values());
     connection?.destroy();
     this.info.stoppedAt = Date.now();
-    writeJson(paths.session(this.opts.sessionDir), this.info);
+    // The name and campaign can be changed in the app while recording: keep what's on disk.
+    const { title, campaign, ...info } = this.info;
+    const onDisk = readJson<SessionInfo>(paths.session(this.opts.sessionDir));
+    const edited = onDisk ? { title: onDisk.title, campaign: onDisk.campaign } : { title, campaign };
+    writeJson(paths.session(this.opts.sessionDir), { ...info, ...(edited.title ? { title: edited.title } : {}), ...(edited.campaign ? { campaign: edited.campaign } : {}) });
     this.log(`Stopped ${this.opts.sessionId}`);
   }
 

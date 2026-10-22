@@ -30,6 +30,7 @@ export const COMMANDS: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
     .setContexts(InteractionContextType.Guild)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption((o) => o.setName('channel').setDescription('Which voice channel (default: the one you are in)').addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice))
+    .addStringOption((o) => o.setName('campaign').setDescription("Which campaign (default: the channel's)").setAutocomplete(true))
     .toJSON(),
   new SlashCommandBuilder().setName('stop').setDescription('Stop recording').setContexts(InteractionContextType.Guild).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).toJSON(),
   new SlashCommandBuilder().setName('status').setDescription('Is this server being recorded, and who is in it?').setContexts(InteractionContextType.Guild).toJSON(),
@@ -45,6 +46,8 @@ export interface CommandRequest {
   memberVoiceChannelId?: string;
   /** The channel picked in /record's option. */
   channelId?: string;
+  /** The campaign picked in /record's option (an ID under `campaigns`). */
+  campaign?: string;
   /** recording.after_stop, to say what happens next. */
   afterStop?: 'nothing' | 'transcribe' | 'summarize';
   now?: number;
@@ -78,7 +81,7 @@ export async function runCommand(req: CommandRequest, bot: Pick<BotControl, 'sta
       const channelId = req.channelId ?? req.memberVoiceChannelId;
       if (!channelId) return 'Join a voice channel first, or pick one: `/record channel:`';
       try {
-        const started = await bot.join(channelId);
+        const started = await bot.join(channelId, req.campaign ? { campaign: req.campaign } : {});
         return `🔴 Recording **#${started.channelName}**. Use /stop when you're done.`;
       } catch (err) {
         return `Couldn't start: ${(err as Error).message}`;

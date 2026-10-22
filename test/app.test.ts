@@ -123,7 +123,7 @@ test('failed steps report a useful error', async () => {
   await jobs.idle();
   const done = (await (await req(`/jobs/${job.id}`)).json()) as { status: string; error: string };
   assert.equal(done.status, 'failed');
-  assert.match(done.error, /No shared accounts configured/);
+  assert.match(done.error, /No shared mics/);
 });
 
 test('config edits keep comments, key order and exact Discord IDs', async () => {
@@ -134,7 +134,9 @@ test('config edits keep comments, key order and exact Discord IDs', async () => 
     '  silence_ms: 1000',
     '',
     'speakers:',
-    `  ${REES}: Rees   # unquoted ID`,
+    '  rees:',
+    '    name: Rees   # the DM',
+    `    discord: [${REES}]`,
     '',
     'summary:',
     '  detail: medium  # low | medium | high',
@@ -143,25 +145,25 @@ test('config edits keep comments, key order and exact Discord IDs', async () => 
   const { req, configPath } = setup(yaml);
   const state = (await (await req('/config')).json()) as { config: any; error: null };
   assert.equal(state.error, null);
-  assert.equal(state.config.speakers[REES], 'Rees');
+  assert.deepEqual(state.config.speakers.rees, { name: 'Rees', discord: [REES] });
 
   const next = structuredClone(state.config);
   next.summary.detail = 'high';
   next.recording.ignore_users = ['234395307759108106'];
-  next.speakers['223456789012345678'] = { name: 'Sam', disambiguate: ['DM — narrates', 'Thorin — a dwarf'] };
+  next.speakers.sam = { name: 'Sam', discord: ['223456789012345678', REES], description: 'plays from the DM’s mic sometimes' };
   const saved = await req('/config', { method: 'PUT', body: JSON.stringify({ config: next }) });
   assert.equal(saved.status, 200);
 
   const written = readFileSync(configPath, 'utf8');
   assert.match(written, /^# My settings\n/);
   assert.match(written, /silence_ms: 1000/);
-  assert.match(written, new RegExp(`${REES}: Rees +# unquoted ID`));
+  assert.match(written, /name: Rees +# the DM/);
   assert.match(written, /detail: high +# low \| medium \| high/);
   assert.match(written, /music bot goes here/);
   assert.match(written, /"234395307759108106"/);
-  assert.match(written, /"223456789012345678":\n\s+name: Sam\n\s+disambiguate:\n\s+- DM — narrates/);
+  assert.match(written, new RegExp(`sam:\\n\\s+name: Sam\\n\\s+discord:\\n\\s+- "223456789012345678"\\n\\s+- "${REES}"`));
   const reread = (await (await req('/config')).json()) as { config: any };
-  assert.equal(reread.config.speakers[REES], 'Rees');
+  assert.deepEqual(reread.config.speakers.rees.discord, [REES], 'unquoted IDs stay exact');
   assert.deepEqual(reread.config.recording.ignore_users, ['234395307759108106']);
 });
 
@@ -205,9 +207,9 @@ test('prompts: custom versions are validated, saved to a folder config points at
   }
 });
 
-test('people from past sessions, and file downloads', async () => {
-  const { req, jobs } = setup(`speakers:\n  ${REES}: Rees\n`);
-  assert.deepEqual(await (await req('/people')).json(), [{ id: REES, names: ['rees_d'], sessions: 1, lastSeen: T0 }]);
+test('Discord accounts from past sessions, and file downloads', async () => {
+  const { req, jobs } = setup(`speakers:\n  rees: { name: Rees, discord: ["${REES}"] }\n`);
+  assert.deepEqual(await (await req('/discord/accounts')).json(), [{ id: REES, names: ['rees_d'], sessions: 1, lastSeen: T0 }]);
   assert.equal((await req('/sessions/game-1/files/transcript.md')).status, 404);
   await req('/sessions/game-1/jobs', { method: 'POST', body: JSON.stringify({ step: 'merge' }) });
   await jobs.idle();
@@ -254,31 +256,31 @@ test('saving from the app adds only the values that differ from the defaults', (
   const full = structuredClone(store.read().config!); // what the Settings page sends: every value, defaults included
   full.summary.detail = 'medium';
   full.recording.silence_ms = 1500;
-  full.campaigns['111111111111111111'] = { characters: { '222222222222222222': 'Thorin' }, guests: [] };
+  full.campaigns['strahd'] = { name: 'Curse of Strahd', channels: [] };
   assert.deepEqual(store.write(full).errors, []);
   assert.equal(
     readFileSync(file, 'utf8'),
-    'summary:\n  detail: medium # kept even though it is the default\nrecording:\n  silence_ms: 1500\ncampaigns:\n  "111111111111111111":\n    characters:\n      "222222222222222222": Thorin\n',
+    'summary:\n  detail: medium # kept even though it is the default\nrecording:\n  silence_ms: 1500\ncampaigns:\n  strahd:\n    name: Curse of Strahd\n',
   );
   assert.equal(store.read().config!.summary.cleanup, true, 'defaults still apply');
 
-  // A new, still-empty campaign is kept; an existing one doesn't gain its default guests: [].
+  // A new speaker keeps its accounts; an existing campaign doesn't gain its default channels: [].
   const next = structuredClone(store.read().config!);
-  next.campaigns['333333333333333333'] = { characters: {}, guests: [] };
+  next.speakers['sam'] = { name: 'Sam', discord: ['222222222222222222'] };
   store.write(next);
-  assert.match(readFileSync(file, 'utf8'), /\n  "333333333333333333": \{\}\n/);
-  assert.doesNotMatch(readFileSync(file, 'utf8'), /guests/);
+  assert.match(readFileSync(file, 'utf8'), /\n  sam:\n    name: Sam\n    discord:\n      - "222222222222222222"\n/);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /channels/);
 
   const fresh = new ConfigStore(join(root, 'new.yaml'));
   fresh.write(structuredClone(full));
   assert.doesNotMatch(readFileSync(join(root, 'new.yaml'), 'utf8'), /include|cleanup|after_stop/);
 });
 
-test('unpaired speakers: pair (and rebuild the transcript), mark as guest, or ignore; each is remembered', async () => {
+test('unpaired accounts: add a speaker (and their character), link to a speaker, or ignore; each is remembered', async () => {
   const CHANNEL = '111111111111111111';
   const ROBIN = '555555555555555555';
   const PAT = '666666666666666666';
-  const { req, dir, jobs, configPath } = setup(`campaigns:\n  "${CHANNEL}":\n    name: Curse of Strahd\n`);
+  const { req, dir, jobs, configPath } = setup(`speakers:\n  pat: { name: Pat }\ncampaigns:\n  strahd:\n    name: Curse of Strahd\n    channels: ["${CHANNEL}"]\n`);
   writeJson(join(dir, 'summary', 'unpaired.json'), [
     { userId: REES, name: 'Rees', role: 'new_player', character: 'Garrick', time: '00:00:01' },
     { userId: ROBIN, name: 'Robin' },
@@ -289,26 +291,28 @@ test('unpaired speakers: pair (and rebuild the transcript), mark as guest, or ig
   const pending = async () => ((await (await req('/sessions/game-1')).json()) as Detail).unpaired.map((u) => u.userId);
   assert.deepEqual(await pending(), [REES, ROBIN, PAT]);
 
-  assert.equal((await decide(REES, { action: 'pair', character: '  ' })).status, 400);
-  assert.equal((await decide(REES, { action: 'nope' })).status, 400);
-  const paired = (await (await decide(REES, { action: 'pair', character: 'Garrick' })).json()) as Detail;
-  assert.ok(paired.jobs.some((j) => j.step === 'merge'), 'the transcript is rebuilt with the new name');
+  assert.equal((await decide(REES, { action: 'new', name: '  ' })).status, 400);
+  assert.equal((await decide(REES, { action: 'pair', character: 'Garrick' })).status, 400, 'the old actions are gone');
+  assert.equal((await decide(PAT, { action: 'link', speaker: 'nobody' })).status, 400);
+  const added = (await (await decide(REES, { action: 'new', name: 'Rees', character: 'Garrick' })).json()) as Detail;
+  assert.ok(added.jobs.some((j) => j.step === 'merge'), 'the transcript is rebuilt with the new name');
   await jobs.idle();
   assert.match(readFileSync(paths.transcript(dir), 'utf8'), /\[00:00:01\] Garrick: Hello table\./);
 
-  await decide(PAT, { action: 'guest' });
+  await decide(PAT, { action: 'link', speaker: 'pat' });
   await decide(ROBIN, { action: 'ignore' });
   assert.deepEqual(await pending(), []);
   const yaml = readFileSync(configPath, 'utf8');
-  assert.match(yaml, new RegExp(`"${REES}":\\n\\s+name: Garrick`));
-  assert.match(yaml, new RegExp(`guests:\\n\\s+- "${PAT}"`));
+  assert.match(yaml, new RegExp(`rees:\\n\\s+name: Rees\\n\\s+discord:\\n\\s+- "${REES}"`));
+  assert.match(yaml, /garrick:\n\s+name: Garrick\n\s+campaign: strahd\n\s+speaker: rees/);
+  assert.match(yaml, new RegExp(`pat: \\{ name: Pat, discord: \\[ "${PAT}" \\] \\}`), 'linked, in the style already in the file');
   assert.doesNotMatch(yaml, new RegExp(ROBIN), 'ignore only applies to this session');
 });
 
-test('pairing needs a campaign for the session', async () => {
+test('a character for an unpaired account needs a campaign for the session', async () => {
   const { req, dir } = setup();
   writeJson(join(dir, 'summary', 'unpaired.json'), [{ userId: REES, name: 'Rees' }]);
-  const res = await req(`/sessions/game-1/unpaired/${REES}`, { method: 'POST', body: JSON.stringify({ action: 'guest' }) });
+  const res = await req(`/sessions/game-1/unpaired/${REES}`, { method: 'POST', body: JSON.stringify({ action: 'new', name: 'Rees', character: 'Garrick' }) });
   assert.equal(res.status, 400);
   assert.match(((await res.json()) as { error: string }).error, /no campaign/);
 });
