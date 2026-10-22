@@ -78,7 +78,7 @@ export function buildMenu(s: MenuState): MenuItem[] {
     items.push({ label, enabled: false });
   }
 
-  items.push(sep, { label: 'Open Session Bot', action: { kind: 'open' } });
+  items.push(sep, { label: 'Open Scrying Eye', action: { kind: 'open' } });
   if (s.recent.length) {
     items.push({
       label: 'Recent Sessions',
@@ -97,6 +97,6 @@ export function buildMenu(s: MenuState): MenuItem[] {
       { label: `What’s New in ${s.update.version}`, action: { kind: 'update', url: s.update.url } },
     );
   else items.push({ label: 'Check for Updates', action: { kind: 'checkUpdates' } });
-  items.push(sep, { label: 'Quit Session Bot', action: { kind: 'quit' } });
+  items.push(sep, { label: 'Quit Scrying Eye', action: { kind: 'quit' } });
   return items;
 }

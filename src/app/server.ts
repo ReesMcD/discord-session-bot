@@ -30,7 +30,7 @@ const server = await startServer({
   allowLan: /^(1|true|yes)$/i.test(process.env.APP_ALLOW_LAN ?? ''),
   bot,
 });
-console.log(`Session bot app on ${server.url}`);
+console.log(`Scrying Eye on ${server.url}`);
 console.log(`From your phone: http://<this Mac's Tailscale name>:${server.port}`);
 
 if (process.env.DISCORD_TOKEN) {

@@ -32,7 +32,7 @@ export function networkGuard(allowLan: boolean): MiddlewareHandler {
   return async (c, next) => {
     const address = clientAddress(c);
     if (!allowLan && address && !isLocalOrTailscale(address)) {
-      return c.text('Session Bot only answers on this Mac and over Tailscale (set APP_ALLOW_LAN=1 to allow your local network).', 403);
+      return c.text('Scrying Eye only answers on this Mac and over Tailscale (set APP_ALLOW_LAN=1 to allow your local network).', 403);
     }
     await next();
   };

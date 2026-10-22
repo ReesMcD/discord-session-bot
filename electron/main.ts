@@ -1,11 +1,11 @@
 /**
- * Session Bot for macOS: a menu bar app that runs the Discord bot, the API and the web UI in one
- * process. Data lives in ~/Library/Application Support/Session Bot/.
+ * Scrying Eye for macOS: a menu bar app that runs the Discord bot, the API and the web UI in one
+ * process. Data lives in ~/Library/Application Support/Session Bot/ (its name before the rename).
  */
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, powerSaveBlocker, safeStorage, shell, Tray, type MenuItemConstructorOptions } from 'electron';
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { accessSync, constants, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { generateDependencyReport } from '@discordjs/voice';
@@ -15,7 +15,7 @@ import { startServer, type RunningServer } from '../src/app/startServer.js';
 import { listSessions } from '../src/app/sessions.js';
 import { PROMPT_NAMES } from '../src/app/promptStore.js';
 import { buildMenu, elapsed, type MenuAction, type MenuItem } from './menuModel.js';
-import { bundlePath, checkForUpdate, downloadVerified, parseManifest, planUpdate, stageCommands, swapScript, type Release } from './updates.js';
+import { APP_BUNDLE, bundlePath, checkForUpdate, downloadVerified, parseManifest, planUpdate, stageCommands, swapScript, updateTarget, type Release } from './updates.js';
 import { applyToEnv, generatePassword, SecretStore, type Cipher } from './secrets.js';
 
 const SMOKE = process.argv.includes('--smoke-test');
@@ -23,7 +23,11 @@ const PORT = Number(process.env.SESSION_BOT_PORT ?? 4400);
 const require = createRequire(import.meta.url);
 
 // --- Paths ------------------------------------------------------------------------------------
-if (SMOKE) app.setPath('userData', mkdtempSync(join(tmpdir(), 'session-bot-smoke-')));
+// The app was called Session Bot. Electron names the Keychain entry that encrypts the saved keys
+// after the app, so it keeps that name inside, along with its data folder.
+const STORAGE_NAME = 'Session Bot';
+app.setName(STORAGE_NAME);
+app.setPath('userData', SMOKE ? mkdtempSync(join(tmpdir(), 'scrying-eye-smoke-')) : join(app.getPath('appData'), STORAGE_NAME));
 const userData = app.getPath('userData');
 const dataDir = join(userData, 'data');
 const configPath = join(userData, 'config.yaml');
@@ -67,7 +71,7 @@ let updating: string | null = null;
 let sleepBlocker: number | undefined;
 let quitting = false;
 
-const log = (m: string) => console.log(`[session-bot] ${m}`);
+const log = (m: string) => console.log(`[scrying-eye] ${m}`);
 
 async function startBot(): Promise<void> {
   await bot.shutdown();
@@ -89,7 +93,7 @@ function openWindow(route = ''): void {
     height: 820,
     minWidth: 380,
     minHeight: 500,
-    title: 'Session Bot',
+    title: 'Scrying Eye',
     // The UI's own background, so the window doesn't flash white while it loads.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0d0f15' : '#f4f5f8',
     show: false,
@@ -184,7 +188,7 @@ function refreshTray(): void {
   };
   tray.setContextMenu(Menu.buildFromTemplate(toElectron(buildMenu(state))));
   tray.setImage(icon(rec ? 'trayRecording' : 'trayTemplate'));
-  tray.setToolTip(rec ? `Recording #${rec.channelName}` : 'Session Bot');
+  tray.setToolTip(rec ? `Recording #${rec.channelName}` : 'Scrying Eye');
   refreshTitle();
 
   // Don't let the Mac sleep mid-recording.
@@ -258,7 +262,7 @@ async function installUpdate(): Promise<void> {
   const appPath = app.isPackaged ? bundlePath(process.execPath) : null;
   if (!appPath || !canWrite(dirname(appPath)) || !canWrite(appPath)) {
     await shell.openExternal(release.url);
-    void dialog.showMessageBox({ message: 'Install this one by hand', detail: 'Session Bot can update itself once it lives in Applications (not on the disk image). Download it from the page that just opened.' });
+    void dialog.showMessageBox({ message: 'Install this one by hand', detail: 'Scrying Eye can update itself once it lives in Applications (not on the disk image). Download it from the page that just opened.' });
     return;
   }
   if (bot.status().recording) throw new Error('Stop the recording first: the app restarts to update.');
@@ -273,7 +277,7 @@ async function installUpdate(): Promise<void> {
   const { response } = await dialog.showMessageBox({
     type: 'question',
     buttons: ['Install and Restart', 'Later'],
-    message: `Install Session Bot ${release.version}?`,
+    message: `Install Scrying Eye ${release.version}?`,
     detail: `It downloads ${mb} MB${plan.kind === 'app' ? ' (just the app’s own code)' : ''}, then restarts, which takes about a minute. Your sessions and settings stay as they are.`,
   });
   if (response !== 0) return;
@@ -300,7 +304,7 @@ async function installUpdate(): Promise<void> {
       if (r.status !== 0) throw new Error(`Couldn't prepare the update (${basename(cmd!)}): ${(r.stderr || r.error?.message || '').trim().slice(0, 300)}`);
     }
     const script = join(dir, 'swap.sh');
-    writeFileSync(script, swapScript({ pid: process.pid, appPath, newApp: join(staging, 'Session Bot.app'), previous: join(dir, 'previous.app'), marker: launchedMarker, version: release.version }), { mode: 0o755 });
+    writeFileSync(script, swapScript({ pid: process.pid, appPath, target: updateTarget(appPath, existsSync), newApp: join(staging, APP_BUNDLE), previous: join(dir, 'previous.app'), marker: launchedMarker, version: release.version }), { mode: 0o755 });
     spawn('/bin/bash', [script], { detached: true, stdio: 'ignore' }).unref();
     log(`updating to ${release.version} (${plan.kind}); restarting`);
   } catch (err) {
@@ -448,8 +452,8 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
       const busy = (err as NodeJS.ErrnoException).code === 'EADDRINUSE';
       await dialog.showMessageBox({
         type: 'error',
-        message: busy ? `Port ${PORT} is already in use` : 'Session Bot could not start',
-        detail: busy ? 'Is another copy of Session Bot (or `npm run app`) running? Quit it and try again.' : (err as Error).message,
+        message: busy ? `Port ${PORT} is already in use` : 'Scrying Eye could not start',
+        detail: busy ? 'Is another copy of Scrying Eye (or `npm run app`) running? Quit it and try again.' : (err as Error).message,
       });
       app.exit(1);
       return;
@@ -475,7 +479,7 @@ if (!SMOKE && !app.requestSingleInstanceLock()) {
     // Tell an update in progress that this version started, and say if the last one didn't.
     writeFileSync(launchedMarker, app.getVersion());
     if (process.argv.includes('--update-failed')) {
-      void dialog.showMessageBox({ type: 'warning', message: 'The update didn’t start, so Session Bot went back to this version.', detail: 'Try again from the menu, or install it by hand from the release page.' });
+      void dialog.showMessageBox({ type: 'warning', message: 'The update didn’t start, so Scrying Eye went back to this version.', detail: 'Try again from the menu, or install it by hand from the release page.' });
     }
 
     await startBot();

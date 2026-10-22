@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildMenu, elapsed, type MenuItem, type MenuState } from '../electron/menuModel.js';
-import { bundlePath, checkForUpdate, compareVersions, downloadVerified, parseManifest, planUpdate, stageCommands, swapScript, type Release } from '../electron/updates.js';
+import { bundlePath, checkForUpdate, compareVersions, downloadVerified, parseManifest, planUpdate, stageCommands, swapScript, updateTarget, type Release } from '../electron/updates.js';
 import { applyToEnv, generatePassword, SecretStore } from '../electron/secrets.js';
 
 const labels = (items: MenuItem[]) => items.map((i) => i.label ?? '---');
@@ -115,9 +115,9 @@ test('updates: the release\'s assets and checksums, from GitHub', async () => {
       tag_name: 'v0.4.0',
       html_url: 'https://example/r',
       assets: [
-        { name: 'Session-Bot-0.4.0-arm64.dmg', browser_download_url: 'https://dl/dmg', size: 150, digest: `sha256:${SHA}` },
-        { name: 'Session-Bot-0.4.0-arm64-mac.zip', browser_download_url: 'https://dl/full', size: 145, digest: `sha256:${SHA}` },
-        { name: 'Session-Bot-0.4.0-arm64-app.zip', browser_download_url: 'https://dl/app', size: 4, digest: `sha256:${SHA}` },
+        { name: 'Scrying-Eye-0.4.0-arm64.dmg', browser_download_url: 'https://dl/dmg', size: 150, digest: `sha256:${SHA}` },
+        { name: 'Scrying-Eye-0.4.0-arm64-mac.zip', browser_download_url: 'https://dl/full', size: 145, digest: `sha256:${SHA}` },
+        { name: 'Scrying-Eye-0.4.0-arm64-app.zip', browser_download_url: 'https://dl/app', size: 4, digest: `sha256:${SHA}` },
         { name: 'update.json', browser_download_url: 'https://dl/manifest', size: 1, digest: null },
       ],
     })) as unknown as typeof fetch;
@@ -150,22 +150,34 @@ test('updates: a download is kept only if it matches its checksum', async () => 
 });
 
 test('updates: staging replaces only our Resources, re-signs, and the swap script restores on failure', () => {
-  const small = stageCommands({ kind: 'app', zip: '/u/app.zip', currentApp: '/Applications/Session Bot.app', staging: '/u/staging', version: '0.4.0' });
+  const small = stageCommands({ kind: 'app', zip: '/u/app.zip', currentApp: '/Applications/Scrying Eye.app', staging: '/u/staging', version: '0.4.0' });
   const flat = small.map((c) => c.join(' '));
-  assert.ok(flat.includes('/usr/bin/ditto /Applications/Session Bot.app /u/staging/Session Bot.app'));
-  assert.ok(flat.some((c) => c.startsWith('/bin/rm -rf /u/staging/Session Bot.app/Contents/Resources/app.asar ')));
+  assert.ok(flat.includes('/usr/bin/ditto /Applications/Scrying Eye.app /u/staging/Scrying Eye.app'));
+  assert.ok(flat.some((c) => c.startsWith('/bin/rm -rf /u/staging/Scrying Eye.app/Contents/Resources/app.asar ')));
   assert.ok(!flat.some((c) => c.includes('Frameworks')), 'Electron itself is kept');
-  assert.ok(flat.includes('/usr/bin/plutil -replace CFBundleShortVersionString -string 0.4.0 /u/staging/Session Bot.app/Contents/Info.plist'));
-  assert.deepEqual(small.at(-2), ['/usr/bin/codesign', '--force', '--deep', '--sign', '-', '/u/staging/Session Bot.app']);
+  assert.ok(flat.includes('/usr/bin/plutil -replace CFBundleShortVersionString -string 0.4.0 /u/staging/Scrying Eye.app/Contents/Info.plist'));
+  assert.deepEqual(small.at(-2), ['/usr/bin/codesign', '--force', '--deep', '--sign', '-', '/u/staging/Scrying Eye.app']);
   const full = stageCommands({ kind: 'full', zip: '/u/full.zip', currentApp: '/A/S.app', staging: '/u/staging', version: '0.4.0' }).map((c) => c.join(' '));
   assert.ok(full.includes('/usr/bin/ditto -x -k /u/full.zip /u/staging'));
 
-  const script = swapScript({ pid: 42, appPath: "/Applications/Session Bot.app", newApp: '/u/staging/Session Bot.app', previous: '/u/previous.app', marker: "/u/it's/launched-version", version: '0.4.0' });
+  const script = swapScript({ pid: 42, appPath: "/Applications/Scrying Eye.app", target: '/Applications/Scrying Eye.app', newApp: '/u/staging/Scrying Eye.app', previous: '/u/previous.app', marker: "/u/it's/launched-version", version: '0.4.0' });
   assert.match(script, /kill -0 42/);
-  assert.match(script, /APP='\/Applications\/Session Bot.app'/);
+  assert.match(script, /APP='\/Applications\/Scrying Eye.app'/);
   assert.match(script, /MARK='\/u\/it'\\''s\/launched-version'/, 'quotes survive');
   assert.match(script, /grep -qx '0.4.0' "\$MARK"/);
   assert.match(script, /mv "\$OLD" "\$APP"\n\/usr\/bin\/open "\$APP" --args --update-failed\n$/, 'puts the old one back if the new one never starts');
-  assert.equal(bundlePath('/Applications/Session Bot.app/Contents/MacOS/Session Bot'), '/Applications/Session Bot.app');
+  assert.equal(bundlePath('/Applications/Scrying Eye.app/Contents/MacOS/Scrying Eye'), '/Applications/Scrying Eye.app');
   assert.equal(bundlePath('/usr/local/bin/node'), null);
+});
+
+test('updates: an install from before the rename comes back as Scrying Eye.app, and goes back under its old name on failure', () => {
+  const old = '/Applications/Session Bot.app';
+  assert.equal(updateTarget(old, () => false), '/Applications/Scrying Eye.app');
+  assert.equal(updateTarget(old, (p) => p === '/Applications/Scrying Eye.app'), old, 'never moves into another copy');
+  assert.equal(updateTarget('/Applications/Scrying Eye.app', () => true), '/Applications/Scrying Eye.app');
+
+  const script = swapScript({ pid: 1, appPath: old, target: '/Applications/Scrying Eye.app', newApp: '/u/staging/Scrying Eye.app', previous: '/u/previous.app', marker: '/u/m', version: '0.4.1' });
+  assert.match(script, /mv "\$NEW" "\$TARGET"/);
+  assert.match(script, /\/usr\/bin\/open "\$TARGET"\n/);
+  assert.match(script, /rm -rf "\$TARGET"\n\/bin\/mv "\$OLD" "\$APP"/, 'restores the old app at its old path');
 });

@@ -9,7 +9,7 @@ in, what to check, and what to send back.
 
 ## Using the Mac app instead
 
-If you install **Session Bot.app** (README → *Install the Mac app*), you don't need any of the
+If you install **Scrying Eye.app** (README → *Install the Mac app*), you don't need any of the
 terminal steps below:
 
 - **Keys:** the app's welcome screen takes them.

@@ -1,6 +1,6 @@
 name: Mac app
 
-# Builds "Session Bot.app" on a real Mac, launches it once to check everything starts, and
+# Builds "Scrying Eye.app" on a real Mac, launches it once to check everything starts, and
 # publishes the .dmg:
 #   - every push to main → downloadable from this workflow run (Actions → Mac app → Artifacts)
 #   - a tag like v0.2.0  → a GitHub Release with the .dmg attached (Releases page)
@@ -29,11 +29,11 @@ jobs:
         run: npm run mac:dist
       - name: Launch it once (smoke test)
         run: |
-          APP="release/mac-arm64/Session Bot.app"
+          APP="release/mac-arm64/Scrying Eye.app"
           # The whole bundle must be sealed, or a downloaded copy opens as "damaged".
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign -dv "$APP" 2>&1 | head -5
-          "$APP/Contents/MacOS/Session Bot" --smoke-test 2>&1 | tee smoke.log &
+          "$APP/Contents/MacOS/Scrying Eye" --smoke-test 2>&1 | tee smoke.log &
           PID=$!
           for i in $(seq 1 90); do
             if grep -q '^SMOKE ' smoke.log 2>/dev/null; then break; fi
@@ -45,15 +45,15 @@ jobs:
       - name: Package the small update
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          RES="release/mac-arm64/Session Bot.app/Contents/Resources"
-          (cd "$RES" && zip -qry "$GITHUB_WORKSPACE/release/Session-Bot-$VERSION-arm64-app.zip" app.asar app.asar.unpacked web prompts assets)
+          RES="release/mac-arm64/Scrying Eye.app/Contents/Resources"
+          (cd "$RES" && zip -qry "$GITHUB_WORKSPACE/release/Scrying-Eye-$VERSION-arm64-app.zip" app.asar app.asar.unpacked web prompts assets)
           node -e "require('fs').writeFileSync('release/update.json', JSON.stringify({ version: require('./package.json').version, electron: require('electron/package.json').version }) + '\n')"
           cat release/update.json
       - name: Install the small update and launch it (as the app would)
-        run: npx tsx scripts/check-update.ts "release/mac-arm64/Session Bot.app" release/*-app.zip "$(node -p "require('./package.json').version")"
+        run: npx tsx scripts/check-update.ts "release/mac-arm64/Scrying Eye.app" release/*-app.zip "$(node -p "require('./package.json').version")"
       - uses: actions/upload-artifact@v4
         with:
-          name: Session-Bot-mac
+          name: Scrying-Eye-mac
           path: |
             release/*.dmg
             release/*.zip
@@ -65,6 +65,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" release/*.dmg release/*.zip release/update.json \
-            --title "Session Bot ${GITHUB_REF_NAME}" \
-            --notes "Already have Session Bot 0.4 or later? Use Install Update in its menu. Otherwise: download the .dmg, open it and drag Session Bot to Applications. First launch: right-click the app → Open (see README → Install the Mac app)." \
+            --title "Scrying Eye ${GITHUB_REF_NAME}" \
+            --notes "Already have the app (0.4 or later, including when it was called Session Bot)? Use Install Update in its menu. Otherwise: download the .dmg, open it and drag Scrying Eye to Applications. First launch: open it once, then System Settings → Privacy & Security → Open Anyway (see README → Install the Mac app)." \
             || gh release upload "${GITHUB_REF_NAME}" release/*.dmg release/*.zip release/update.json --clobber

@@ -1,5 +1,5 @@
 appId: com.reesmcd.sessionbot
-productName: Session Bot
+productName: Scrying Eye
 copyright: Copyright © 2026 Rees McDevitt
 directories:
   output: release
@@ -38,8 +38,8 @@ mac:
   hardenedRuntime: false
   extendInfo:
     LSUIElement: true
-  artifactName: Session-Bot-${version}-${arch}-mac.${ext}
+  artifactName: Scrying-Eye-${version}-${arch}-mac.${ext}
 dmg:
-  title: Session Bot
-  artifactName: Session-Bot-${version}-${arch}.${ext}
+  title: Scrying Eye
+  artifactName: Scrying-Eye-${version}-${arch}.${ext}
 publish: null

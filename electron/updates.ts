@@ -14,6 +14,9 @@ import { pipeline } from 'node:stream/promises';
 export const REPO = 'ReesMcD/discord-session-bot';
 
 /** What Contents/Resources holds that the small update replaces (electron-builder.yml decides it). */
+/** The app's bundle name (productName in electron-builder.yml). */
+export const APP_BUNDLE = 'Scrying Eye.app';
+
 export const APP_RESOURCES = ['app.asar', 'app.asar.unpacked', 'web', 'prompts', 'assets'] as const;
 
 /** Compares dotted versions ("v0.3.1" vs "0.3.0"); returns >0 when a is newer. */
@@ -55,7 +58,7 @@ interface GitHubAsset {
 /** Looks up the newest GitHub release; returns it only if newer than the running version. */
 export async function checkForUpdate(current: string, fetchImpl: typeof fetch = fetch): Promise<Release | null> {
   const res = await fetchImpl(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'session-bot' },
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'scrying-eye' },
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) return null;
@@ -100,7 +103,7 @@ export function planUpdate(release: Release, manifest: UpdateManifest | null, in
 /** Downloads to `dest`, refusing anything that doesn't match the published SHA-256. */
 export async function downloadVerified(asset: ReleaseAsset, dest: string, fetchImpl: typeof fetch = fetch, onProgress?: (fraction: number) => void): Promise<void> {
   if (!asset.sha256) throw new Error(`${asset.name} has no published checksum`);
-  const res = await fetchImpl(asset.url, { headers: { 'User-Agent': 'session-bot' }, signal: AbortSignal.timeout(30 * 60_000) });
+  const res = await fetchImpl(asset.url, { headers: { 'User-Agent': 'scrying-eye' }, signal: AbortSignal.timeout(30 * 60_000) });
   if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
   const hash = createHash('sha256');
   let received = 0;
@@ -123,7 +126,7 @@ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
  * signature (the bundle changed), and no quarantine flag.
  */
 export function stageCommands(o: { kind: 'app' | 'full'; zip: string; currentApp: string; staging: string; version: string }): string[][] {
-  const app = `${o.staging}/Session Bot.app`;
+  const app = `${o.staging}/${APP_BUNDLE}`;
   const resources = `${app}/Contents/Resources`;
   const steps: string[][] = [['/bin/rm', '-rf', o.staging], ['/bin/mkdir', '-p', o.staging]];
   if (o.kind === 'full') steps.push(['/usr/bin/ditto', '-x', '-k', o.zip, o.staging]);
@@ -139,36 +142,46 @@ export function stageCommands(o: { kind: 'app' | 'full'; zip: string; currentApp
 }
 
 /**
- * The script that runs after the app quits: swap the new app in, start it, and if it hasn't said
- * it started (written its version to `marker`) within a minute, put the old one back.
+ * Where the updated app goes: next to the current one under the app's current name (installs from
+ * before the rename were "Session Bot.app"), unless something else already has that name.
  */
-export function swapScript(o: { pid: number; appPath: string; newApp: string; previous: string; marker: string; version: string }): string {
+export function updateTarget(appPath: string, exists: (path: string) => boolean): string {
+  const renamed = `${appPath.slice(0, appPath.lastIndexOf('/'))}/${APP_BUNDLE}`;
+  return renamed === appPath || !exists(renamed) ? renamed : appPath;
+}
+
+/**
+ * The script that runs after the app quits: swap the new app in at `target`, start it, and if it
+ * hasn't said it started (written its version to `marker`) within a minute, put the old one back.
+ */
+export function swapScript(o: { pid: number; appPath: string; target: string; newApp: string; previous: string; marker: string; version: string }): string {
   return `#!/bin/bash
 set -u
 APP=${q(o.appPath)}
+TARGET=${q(o.target)}
 NEW=${q(o.newApp)}
 OLD=${q(o.previous)}
 MARK=${q(o.marker)}
 while /bin/kill -0 ${o.pid} 2>/dev/null; do /bin/sleep 0.5; done
 /bin/rm -rf "$OLD"
 if ! /bin/mv "$APP" "$OLD"; then /usr/bin/open "$APP"; exit 1; fi
-if ! /bin/mv "$NEW" "$APP"; then /bin/mv "$OLD" "$APP"; /usr/bin/open "$APP" --args --update-failed; exit 1; fi
+if ! /bin/mv "$NEW" "$TARGET"; then /bin/mv "$OLD" "$APP"; /usr/bin/open "$APP" --args --update-failed; exit 1; fi
 /bin/rm -f "$MARK"
-/usr/bin/open "$APP"
+/usr/bin/open "$TARGET"
 for i in $(/usr/bin/seq 1 120); do
   if /usr/bin/grep -qx ${q(o.version)} "$MARK" 2>/dev/null; then /bin/rm -rf "$OLD"; exit 0; fi
   /bin/sleep 0.5
 done
 # The new version didn't start: put the old one back.
-/usr/bin/pkill -f "$APP/Contents/MacOS/" 2>/dev/null
+/usr/bin/pkill -f "$TARGET/Contents/MacOS/" 2>/dev/null
 /bin/sleep 1
-/bin/rm -rf "$APP"
+/bin/rm -rf "$TARGET"
 /bin/mv "$OLD" "$APP"
 /usr/bin/open "$APP" --args --update-failed
 `;
 }
 
-/** The .app bundle this executable is in (…/Session Bot.app), or null when not running from one. */
+/** The .app bundle this executable is in (…/Scrying Eye.app), or null when not running from one. */
 export function bundlePath(execPath: string): string | null {
   const m = /^(.*?\.app)\/Contents\/MacOS\/[^/]+$/.exec(execPath);
   return m ? m[1]! : null;

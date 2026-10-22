@@ -149,7 +149,7 @@ export function KeysSection() {
           <button type="button" onClick={() => void bridge.revealDataFolder()}>
             Show in Finder
           </button>
-          <span className="muted small">Session Bot {version}</span>
+          <span className="muted small">Scrying Eye {version}</span>
         </div>
       </div>
     </div>
