@@ -7,6 +7,7 @@ import { readJson, readSessionInfo, writeJson } from '../session/layout.js';
 import type { RecapUpload, UploadTestResult } from '../shared/types.js';
 import { readRecap, recapState } from '../summary/recapEdits.js';
 import { HttpError, parseRetryAfter, withRetry, type RetryOptions } from '../util/retry.js';
+import { toWikiSession, wikiConnectionTest, type WikiSession } from './ardentWeave.js';
 
 /** The upload key's environment variable (the Mac app sets it from the Keychain). */
 export const UPLOAD_TOKEN_ENV = 'WIKI_UPLOAD_TOKEN';
@@ -61,15 +62,29 @@ export function buildPayload(sessionDir: string, config: Config): RecapPayload {
   };
 }
 
-/** The HTTP request for a payload: JSON, or Markdown with the other fields as YAML front matter. */
-export function buildRequest(payload: RecapPayload | { test: true }, settings: UploadSettings, token: string | undefined): { url: string; init: RequestInit } {
+/** The address and the key's header. The Ardent Weave endpoint always takes a bearer token. */
+function baseRequest(settings: UploadSettings, token: string | undefined): { url: string; headers: Record<string, string> } {
   if (!settings.url) throw new Error('Set the upload address first (Settings → Upload)');
   const headers: Record<string, string> = { 'User-Agent': 'ScryingEye' };
-  if (settings.auth !== 'none') {
+  const auth = settings.format === 'ardent-weave' ? 'bearer' : settings.auth;
+  if (auth !== 'none') {
     if (!token) throw new Error(`The upload key is missing: add it under Settings → Keys (Mac app) or as ${UPLOAD_TOKEN_ENV} in .env`);
-    if (settings.auth === 'bearer') headers.Authorization = `Bearer ${token}`;
+    if (auth === 'bearer') headers.Authorization = `Bearer ${token}`;
     else headers[settings.header_name] = token;
   }
+  return { url: settings.url, headers };
+}
+
+/** The Ardent Weave wiki's /api/sessions request (always a JSON POST). */
+export function buildWikiRequest(session: WikiSession, settings: UploadSettings, token: string | undefined): { url: string; init: RequestInit } {
+  const { url, headers } = baseRequest(settings, token);
+  headers['Content-Type'] = 'application/json';
+  return { url, init: { method: 'POST', headers, body: JSON.stringify(session) } };
+}
+
+/** The HTTP request for a payload: JSON, or Markdown with the other fields as YAML front matter. */
+export function buildRequest(payload: RecapPayload | { test: true }, settings: UploadSettings, token: string | undefined): { url: string; init: RequestInit } {
+  const { url, headers } = baseRequest(settings, token);
   let body: string;
   if ('markdown' in payload) {
     // Retries of the same content are the same request; an edited recap is a new one.
@@ -89,7 +104,7 @@ export function buildRequest(payload: RecapPayload | { test: true }, settings: U
     headers['Content-Type'] = 'text/markdown; charset=utf-8';
     body = '---\ntest: true\n---\n\nConnection test from Scrying Eye. Nothing to save.\n';
   }
-  return { url: settings.url, init: { method: settings.method, headers, body } };
+  return { url, init: { method: settings.method, headers, body } };
 }
 
 export interface SendOptions extends Pick<RetryOptions, 'sleep'> {
@@ -102,7 +117,15 @@ export interface SendOptions extends Pick<RetryOptions, 'sleep'> {
 async function send(request: { url: string; init: RequestInit }, doFetch: typeof fetch): Promise<Response> {
   const res = await doFetch(request.url, { ...request.init, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (res.ok) return res;
-  const text = (await res.text().catch(() => '')).trim().slice(0, 200);
+  const raw = (await res.text().catch(() => '')).trim();
+  // A JSON {"error": "..."} (the wiki's style) reads better as just its message.
+  let text = raw.slice(0, 200);
+  try {
+    const error = (JSON.parse(raw) as { error?: unknown }).error;
+    if (typeof error === 'string') text = error.slice(0, 300);
+  } catch {
+    /* not JSON: keep the start of the text */
+  }
   const reason = res.status === 401 || res.status === 403 ? 'the endpoint refused the key' : res.statusText || 'request failed';
   throw new HttpError(res.status, `Upload failed: ${res.status} ${reason}${text ? ` (${text})` : ''}`, parseRetryAfter(res.headers.get('retry-after')));
 }
@@ -127,7 +150,10 @@ async function pageUrl(res: Response): Promise<string | undefined> {
 export async function uploadRecap(sessionDir: string, config: Config, token: string | undefined, opts: SendOptions = {}): Promise<RecapUpload> {
   const log = opts.log ?? (() => {});
   const payload = buildPayload(sessionDir, config);
-  const request = buildRequest(payload, config.upload, token);
+  const request =
+    config.upload.format === 'ardent-weave'
+      ? buildWikiRequest(toWikiSession(sessionDir, config, { id: payload.id, date: payload.date, markdown: payload.markdown }, log), config.upload, token)
+      : buildRequest(payload, config.upload, token);
   log(`Uploading "${payload.title}"${payload.edited ? ' (edited)' : ''} to ${new URL(request.url).host}`);
   const res = await withRetry(() => send(request, opts.fetch ?? fetch), {
     retries: 3,
@@ -149,9 +175,18 @@ export function uploadStatus(sessionDir: string): RecapUpload | null {
   return { uploadedAt: record.uploadedAt, ...(record.url ? { url: record.url } : {}), changedSince: markdown !== null && hashOf(markdown) !== record.hash };
 }
 
-/** Sends a test request ({ "test": true }) once, without retrying, and reports what came back. */
-export async function testUpload(settings: UploadSettings, token: string | undefined, doFetch: typeof fetch = fetch): Promise<UploadTestResult> {
+/**
+ * Sends a test request once, without retrying, and reports what came back: { "test": true }, or
+ * for the Ardent Weave wiki a dry run for `campaign`, which also checks the campaign name.
+ */
+export async function testUpload(settings: UploadSettings, token: string | undefined, doFetch: typeof fetch = fetch, campaign?: string): Promise<UploadTestResult> {
   try {
+    if (settings.format === 'ardent-weave') {
+      if (!campaign) return { ok: false, message: 'Name a campaign under Settings → Campaigns first, spelled as the wiki’s campaign is' };
+      const res = await send(buildWikiRequest(wikiConnectionTest(campaign), settings, token), doFetch);
+      const path = ((await res.json().catch(() => ({}))) as { path?: unknown }).path;
+      return { ok: true, status: res.status, message: `Connected: recaps for "${campaign}" will be filed in its Sessions folder${typeof path === "string" ? ` (next: ${path.split("/").pop()})` : ""}` };
+    }
     const res = await send(buildRequest({ test: true }, settings, token), doFetch);
     return { ok: true, status: res.status, message: `Connected (${res.status})` };
   } catch (err) {

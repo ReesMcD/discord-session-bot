@@ -328,3 +328,5 @@ details.card > summary { cursor: pointer; min-height: 32px; display: flex; align
 a.button { display: inline-flex; align-items: center; text-decoration: none; }
 .live-transcript input[type='search'] { margin: 10px 0 8px; }
 .live-lines { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+.recap-lead { font-size: 1.05rem; margin: 4px 2px 14px; }
+.recap-lead p { margin: 0; }

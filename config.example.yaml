@@ -86,7 +86,7 @@ summary:
 upload:
   # url: https://wiki.example.com/api/recaps   # empty = uploading off
   method: POST                # POST | PUT
-  format: json                # json | markdown (the recap with YAML front matter)
+  format: json                # json | markdown (the recap with YAML front matter) | ardent-weave (the Ardent Weave wiki's /api/sessions)
   auth: bearer                # bearer | header (header_name: <key>) | none
   header_name: X-Api-Key
   auto: false                 # upload right after a recording's recap is written

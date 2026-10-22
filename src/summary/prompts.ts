@@ -7,7 +7,7 @@ import type { PromptName } from '../shared/types.js';
 /** Bump a template's version when it changes meaningfully; recorded in each recap's metadata. */
 export const PROMPT_VERSIONS = {
   extract: 'v2',
-  synthesize: 'v2',
+  synthesize: 'v3',
   cleanup: 'v2',
   audit: 'v1',
   revise: 'v1',

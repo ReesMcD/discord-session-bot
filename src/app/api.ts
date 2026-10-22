@@ -177,11 +177,11 @@ export function createApi(opts: ApiOptions): Hono {
   // --- Config -----------------------------------------------------------------------------------
   /** Sends a test request with the upload settings given (unsaved edits included). */
   api.post('/upload/test', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { upload?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { upload?: unknown; campaign?: unknown };
     const parsed = configSchema.shape.upload.safeParse(body.upload ?? {});
     if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? 'invalid upload settings' }, 400);
     if (!parsed.data.url) return c.json({ error: 'Set the address first' }, 400);
-    return c.json(await testUpload(parsed.data, process.env[UPLOAD_TOKEN_ENV], opts.uploadFetch));
+    return c.json(await testUpload(parsed.data, process.env[UPLOAD_TOKEN_ENV], opts.uploadFetch, typeof body.campaign === 'string' ? body.campaign : undefined));
   });
 
   api.get('/config', (c) => c.json(opts.configStore.read()));
