@@ -18,6 +18,10 @@ export interface SessionInfo {
   channelName?: string;
   /** Set when the audio was deleted under recording.audio_retention_days (the text is kept). */
   audioDeletedAt?: number;
+  /** A name given by hand; otherwise sessions.title makes one. */
+  title?: string;
+  /** The campaign picked for this session (its key in `campaigns`); wins over the voice channel's. */
+  campaign?: string;
 }
 
 export interface Participant {
@@ -44,6 +48,12 @@ export interface TranscriptLine {
 
 export interface SessionSummary {
   id: string;
+  /** Its name: given by hand, or from the sessions.title template. */
+  title: string;
+  /** True when the name was given by hand. */
+  customTitle: boolean;
+  /** The campaign it belongs to (key and name), picked or from its voice channel. */
+  campaign: { key: string; name: string | null; picked: boolean } | null;
   startedAt: number;
   stoppedAt?: number;
   channelName?: string;

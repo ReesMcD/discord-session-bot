@@ -75,6 +75,22 @@ export const configSchema = z
     /** Voice channel ID → the campaign played there: its playable characters and background. */
     campaigns: z.record(snowflake, campaign).default({}),
 
+    sessions: z
+      .object({
+        /**
+         * How sessions are named unless renamed by hand: {campaign} (or #channel without one),
+         * {channel}, {date} ("Oct 22, 2026") and {time} ("7:02 PM"), in transcript.timezone.
+         */
+        title: z
+          .string()
+          .min(1)
+          .max(120)
+          .refine((t) => (t.match(/\{[^}]*\}/g) ?? []).every((p) => ['{campaign}', '{channel}', '{date}', '{time}'].includes(p)), 'use only {campaign}, {channel}, {date} and {time}')
+          .default('{campaign} — {date}'),
+      })
+      .strict()
+      .prefault({}),
+
     transcription: z
       .object({
         provider: z.enum(['groq', 'openai']).default('groq'),

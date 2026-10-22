@@ -10,7 +10,7 @@ type Upload = Config['upload'];
 /** What the endpoint receives, so whoever builds it knows the contract. */
 const EXAMPLE = {
   id: '2026-10-20T19-02-11Z_game-night',
-  title: 'Curse of Strahd — 2026-10-20',
+  title: 'Curse of Strahd — Oct 20, 2026',
   date: '2026-10-20',
   startedAt: '2026-10-20T19:02:11.000Z',
   stoppedAt: '2026-10-20T22:31:40.000Z',

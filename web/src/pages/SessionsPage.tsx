@@ -26,7 +26,7 @@ export function SessionsPage() {
       {sessions.map((s) => (
         <a key={s.id} className="card card-link" href={href('sessions', s.id)}>
           <div className="row spread">
-            <span className="display session-title">{s.channelName ? `#${s.channelName}` : s.id}</span>
+            <span className="display session-title">{s.title}</span>
             <span className="muted small">{when(s.startedAt)}</span>
           </div>
           <div className="muted small" style={{ margin: '4px 0 8px' }}>

@@ -80,7 +80,7 @@ export function buildMenu(s: MenuState): MenuItem[] {
     items.push({
       label: 'Recent Sessions',
       submenu: s.recent.slice(0, 6).map((r) => ({
-        label: `${r.channelName ? `#${r.channelName}` : r.id} · ${new Date(r.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}${r.has.summary ? ' ✓' : ''}`,
+        label: `${r.title}${r.has.summary ? ' ✓' : ''}`,
         action: { kind: 'open', route: `sessions/${encodeURIComponent(r.id)}` },
       })),
     });

@@ -67,7 +67,7 @@ test('uploads the recap as JSON with the key, then remembers when and where', as
     assert.match(String(req!.headers['idempotency-key']), /^s1-[0-9a-f]{16}$/);
     assert.deepEqual(JSON.parse(req!.body), {
       id: 's1',
-      title: 'Curse of Strahd — 2026-10-20',
+      title: 'Curse of Strahd — Oct 20, 2026',
       date: '2026-10-20',
       startedAt: '2026-10-20T19:02:11.000Z',
       stoppedAt: '2026-10-20T20:02:11.000Z',
@@ -141,7 +141,7 @@ test('markdown format: front matter, then the recap; a custom key header', async
     assert.equal(req.headers.authorization, undefined);
     assert.match(String(req.headers['content-type']), /^text\/markdown/);
     const [, front, body] = /^---\n([\s\S]*?)\n---\n\n([\s\S]*)$/.exec(req.body)!;
-    assert.equal(parse(front!).title, 'Curse of Strahd — 2026-10-20');
+    assert.equal(parse(front!).title, 'Curse of Strahd — Oct 20, 2026');
     assert.equal(body, RECAP);
     assert.equal(status.url, `${new URL(wiki.url).origin}/pages/s1`, 'a relative Location resolves against the endpoint');
   } finally {
