@@ -2,6 +2,7 @@
  * The JSON shapes the API sends and receives. Type-only and free of Node imports, so the web UI
  * (web/src/types.ts) imports these same definitions instead of keeping copies.
  */
+import type { BattleMap, Cell } from './battlemap.js';
 import type { Config } from '../config/schema.js';
 
 export type { Config };
@@ -460,7 +461,8 @@ export interface EncounterState {
   /** DM text from the wiki: read-aloud, setup, tactics, treasure. */
   notes?: Pick<WikiEncounter, 'summary' | 'read_aloud' | 'setup' | 'tactics' | 'changes' | 'treasure'>;
   statBlocks: Record<string, EncounterStatBlock>;
-  map: Record<string, unknown> | null;
+  /** The battle map (the wiki's format, as this app reads it), with tokens where they stand now. */
+  map: BattleMap | null;
   startedAt: number;
   endedAt?: number;
   log: EncounterLogEntry[];
@@ -509,7 +511,15 @@ export type EncounterAction =
   | { type: 'condition'; id: string; name: ConditionName; remove?: boolean; level?: number; rounds?: number; tick?: { on: 'start' | 'end'; of: string } }
   | { type: 'concentrate'; id: string; spell: string | null }
   | { type: 'concentrationResult'; id: string; kept: boolean }
-  | { type: 'reveal'; id: string; hidden?: boolean };
+  | { type: 'reveal'; id: string; hidden?: boolean }
+  /** Moves a token on the map (any token, by its id on the map). */
+  | { type: 'move'; token: string; at: Cell }
+  /** Puts a combatant without a token on the map, at (or next to) a square. */
+  | { type: 'place'; id: string; at: Cell }
+  | { type: 'door'; index: number; state: 'open' | 'closed' | 'locked' }
+  | { type: 'difficult'; at: Cell; on: boolean }
+  /** An empty map, for an encounter without one. */
+  | { type: 'newMap'; width: number; height: number };
 
 // --- The player view (the public join link) ------------------------------------------------------
 
@@ -547,13 +557,19 @@ export interface PlayerView {
   myInitiative: number | null;
   /** My AC (only mine). */
   myAc: number | null;
+  /** The map without hidden tokens or DM notes, if the encounter has one. */
+  map: BattleMap | null;
+  /** Visible combatant id → its token on the map. */
+  tokens: Record<string, string>;
 }
 
 /** What a player may change, and only on their own PC. */
 export type PlayerRequest =
   | { type: 'initiative'; value: number }
   | { type: 'damage' | 'heal' | 'tempHp'; amount: number }
-  | { type: 'condition'; name: ConditionName; remove?: boolean };
+  | { type: 'condition'; name: ConditionName; remove?: boolean }
+  /** Moves my own token. */
+  | { type: 'move'; at: Cell };
 
 /** GET /encounter/link: where players join. */
 export interface JoinLink {

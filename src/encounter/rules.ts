@@ -1,3 +1,4 @@
+import { blankMap, MapError, moveToken, placeToken, setDifficult, setDoor, type BattleMap } from '../shared/battlemap.js';
 import type { Combatant, CombatantKind, Condition, ConditionName, EncounterAction, EncounterOutcome, EncounterState } from '../shared/types.js';
 
 /** The 2024 conditions, in the order the tracker lists them. */
@@ -262,13 +263,59 @@ export function applyAction(state: EncounterState, action: EncounterAction, deps
     case 'reveal': {
       const c = find(action.id);
       c.hidden = action.hidden ?? false;
+      // The token shows (or hides) with its combatant.
+      if (s.map && c.tokenId) s.map = { ...s.map, tokens: s.map.tokens.map((t) => (t.id === c.tokenId ? { ...t, hidden: c.hidden } : t)) };
       log(c.hidden ? `${c.name} hidden` : `${c.name} revealed`);
+      break;
+    }
+    case 'move':
+      s.map = onMap(s, (m) => moveToken(m, action.token, action.at));
+      break;
+    case 'place': {
+      const c = find(action.id);
+      const tokenId = c.tokenId ?? uniqueTokenId(s.map, c.id);
+      s.map = onMap(s, (m) => placeToken(m, { id: tokenId, name: c.name, kind: c.kind, size: 'medium', ...(c.hidden ? { hidden: true } : {}) }, action.at));
+      c.tokenId = tokenId;
+      break;
+    }
+    case 'door':
+      s.map = onMap(s, (m) => setDoor(m, action.index, action.state));
+      break;
+    case 'difficult':
+      s.map = onMap(s, (m) => setDifficult(m, action.at, action.on));
+      break;
+    case 'newMap': {
+      if (s.map) throw new EncounterError('This encounter already has a map');
+      s.map = asEncounterError(() => blankMap(action.width, action.height));
       break;
     }
     default:
       throw new EncounterError('Unknown action');
   }
   return s;
+}
+
+/** Applies a map change, as an EncounterError when the map refuses it. */
+function onMap(s: EncounterState, change: (map: BattleMap) => BattleMap): BattleMap {
+  if (!s.map) throw new EncounterError('This encounter has no map');
+  const map = s.map;
+  return asEncounterError(() => change(map));
+}
+
+function asEncounterError<T>(f: () => T): T {
+  try {
+    return f();
+  } catch (err) {
+    if (err instanceof MapError) throw new EncounterError(err.message);
+    throw err;
+  }
+}
+
+function uniqueTokenId(map: BattleMap | null, base: string): string {
+  const taken = new Set(map?.tokens.map((t) => t.id));
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
 }
 
 function requireRunning(s: EncounterState) {
